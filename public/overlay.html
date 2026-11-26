@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overlay</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/scoreboard.css">
+<style>
+  /* Add this page to OBS as a Browser source at 1920×1080. Everything but the overlays is see-through. */
+  html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
+  .viewport { position: fixed; inset: 0; overflow: hidden; }
+</style>
+</head>
+<body>
+<div class="viewport" id="viewport"></div>
+<script src="/match.js"></script>
+<script src="/stage.js"></script>
+<script src="/scoreboard.js"></script>
+<script src="/overlays.js"></script>
+<script src="/connect.js"></script>
+<script>
+  // One page for every overlay: each one draws into the same 1920×1080 stage.
+  const stage = Stage.create(document.getElementById('viewport'));
+  const shown = {};
+  Object.entries(OverlayRegistry).forEach(([id, o]) => { shown[id] = { o, view: o.mount(stage) }; });
+  const draw = (id, state) => { const m = shown[id]; if (m) m.view.render(m.o.normalize(state)); };
+  Live.connect({
+    onHello: (msg) => Object.entries(msg.modules || {}).forEach(([id, state]) => draw(id, state)),
+    onState: draw,
+  });
+</script>
+</body>
+</html>

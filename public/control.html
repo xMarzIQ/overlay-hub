@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0a0c">
+<title>Overlay hub</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/scoreboard.css">
+<link rel="stylesheet" href="/hub.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="back" type="button" id="backBtn" data-act="home" hidden aria-label="Back to all overlays">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Overlays</span>
+      </button>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 17v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="11" r="2.4" fill="currentColor"/></svg>
+        </div>
+        <div class="brand-text">
+          <h1 id="pageTitle">Overlay hub</h1>
+          <p id="pageSub">Every overlay on one OBS link</p>
+        </div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="conn" id="conn" data-state="connecting" role="status"><i aria-hidden="true"></i><span id="connText">Connecting…</span></span>
+      <button class="btn btn-quiet keys-btn" type="button" data-act="keys" aria-label="Keyboard shortcuts">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1M9.5 10h1M13 10h1M16.5 10h1M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>Shortcuts</span>
+      </button>
+    </div>
+  </header>
+
+  <p class="notice" id="openNotice" hidden>This hub isn’t locked, so anyone with the link can change your overlays. Set <code>CONTROL_KEY</code> on the server to lock it.</p>
+
+  <section class="unlock" id="unlock" hidden aria-labelledby="hUnlock">
+    <div class="unlock-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>
+    </div>
+    <div class="unlock-body">
+      <h2 id="hUnlock">Unlock the hub</h2>
+      <p>Enter the control key that was set on the server. This device remembers it.</p>
+      <div class="unlock-row">
+        <input class="input" id="keyInput" type="password" autocomplete="current-password" placeholder="Control key" aria-label="Control key" aria-describedby="keyError">
+        <button class="btn btn-primary" type="button" data-act="unlock">Unlock</button>
+      </div>
+      <p class="field-error" id="keyError" role="status"></p>
+    </div>
+  </section>
+
+  <main class="hub" id="hub" data-view="home">
+    <section class="monitor-col" aria-label="Preview">
+      <div class="viewport-shell">
+        <div class="viewport" id="viewport">
+          <div class="stage-tag" id="monitorTag" data-mode="wait">
+            <i class="stage-tag-dot" aria-hidden="true"></i>
+            <span id="monitorText" aria-live="polite">Connecting…</span>
+            <button class="btn btn-tag" type="button" data-act="sample-off">Back to live</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="monitor-bar">
+        <div class="seg seg-sm" id="modeSeg" role="group" aria-label="What the preview shows">
+          <button type="button" data-act="monitor" data-val="output">Live output</button>
+          <button type="button" data-act="monitor" data-val="preview">Preview</button>
+        </div>
+        <div class="seg seg-sm" id="bgSeg" role="group" aria-label="Preview background">
+          <button type="button" data-act="bg" data-val="checker" title="See-through">Checker</button>
+          <button type="button" data-act="bg" data-val="dark">Dark</button>
+          <button type="button" data-act="bg" data-val="light">Light</button>
+        </div>
+        <label class="check check-sm"><input type="checkbox" id="safeToggle"><span>Safe area</span></label>
+      </div>
+
+      <div class="module-tools" id="sampleTools" hidden>
+        <span class="tools-label" id="samplesLabel">Try a state in the preview</span>
+        <div class="chips" id="chips" role="group" aria-labelledby="samplesLabel">
+          <button class="chip" type="button" data-act="sample" data-sample="pre" aria-pressed="false">Pre-match</button>
+          <button class="chip" type="button" data-act="sample" data-sample="live" aria-pressed="false">Live 71’</button>
+          <button class="chip" type="button" data-act="sample" data-sample="add1" aria-pressed="false">45+ added</button>
+          <button class="chip" type="button" data-act="sample" data-sample="ht" aria-pressed="false">Half-time</button>
+          <button class="chip" type="button" data-act="sample" data-sample="add2" aria-pressed="false">90+ added</button>
+          <button class="chip" type="button" data-act="sample" data-sample="ft" aria-pressed="false">Full-time</button>
+        </div>
+      </div>
+
+      <div class="link-card">
+        <div class="link-row">
+          <label class="field"><span class="field-label">Overlay link for OBS: one Browser source, 1920×1080, shows every overlay</span><input class="input" id="overlayUrl" type="text" readonly></label>
+          <button class="btn" type="button" data-act="copy-link" id="copyBtn">Copy</button>
+          <a class="btn" id="openOverlay" href="/overlay" target="_blank" rel="noopener">Open</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="side-col">
+      <!-- All overlays -->
+      <div class="view" id="viewHome">
+        <div class="section-head">
+          <h2>Your overlays</h2>
+          <p>Open one to set it up, check it in Preview, then put it on screen.</p>
+        </div>
+        <div class="tiles" id="tiles"></div>
+      </div>
+
+      <!-- Live scoreboard -->
+      <div class="view" id="viewScoreboard" hidden>
+        <div class="controls" id="controls">
+          <section class="module-bar" aria-label="Scoreboard output and data">
+            <div class="module-bar-row">
+              <div class="seg seg-air" role="group" aria-label="Scoreboard on stream">
+                <button class="on" type="button" data-act="air" data-val="1">On screen</button>
+                <button type="button" data-act="air" data-val="0">Off screen</button>
+              </div>
+              <div class="seg seg-mode" role="group" aria-label="Where the match data comes from">
+                <button class="on" type="button" data-act="mode" data-val="live">ESPN live</button>
+                <button type="button" data-act="mode" data-val="manual">Manual</button>
+              </div>
+            </div>
+            <p class="source-line" id="sourceLine" aria-live="polite"><i aria-hidden="true"></i><span id="sourceText"></span></p>
+          </section>
+
+          <nav class="tabs" role="tablist" aria-label="Scoreboard settings">
+            <button type="button" role="tab" id="tab-match" aria-controls="panel-match" data-act="tab" data-tab="match">Match</button>
+            <button type="button" role="tab" id="tab-stats" aria-controls="panel-stats" data-act="tab" data-tab="stats">Stats</button>
+            <button type="button" role="tab" id="tab-teams" aria-controls="panel-teams" data-act="tab" data-tab="teams">Teams</button>
+            <button type="button" role="tab" id="tab-layout" aria-controls="panel-layout" data-act="tab" data-tab="layout">Layout</button>
+          </nav>
+
+          <!-- Match: the live deck and choosing a game -->
+          <div class="tab-panel" role="tabpanel" id="panel-match" aria-labelledby="tab-match" data-tab="match">
+            <section class="deck" aria-label="Live match">
+              <div class="band clock-band">
+                <div class="clock-well">
+                  <div class="clock-meta">
+                    <span class="tally" id="tally" data-tone="live" hidden>Live</span>
+                    <span class="clock-label" id="readState"></span>
+                  </div>
+                  <div class="clock-big" id="readTime"></div>
+                </div>
+                <button class="btn btn-clock" type="button" data-act="clock" id="clockBtn" data-running="false">
+                  <svg class="i-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+                  <svg class="i-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.6v12.8a1 1 0 0 0 1.52.85l10.06-6.4a1 1 0 0 0 0-1.7L9.52 4.75A1 1 0 0 0 8 5.6z"/></svg>
+                  <span id="clockBtnText">Start</span>
+                </button>
+                <div class="nudges">
+                  <button class="btn" type="button" data-act="nudge" data-d="-60">−1 min</button>
+                  <button class="btn" type="button" data-act="nudge" data-d="-10">−10 s</button>
+                  <button class="btn" type="button" data-act="nudge" data-d="10">+10 s</button>
+                  <button class="btn" type="button" data-act="nudge" data-d="60">+1 min</button>
+                </div>
+                <div class="clock-tools">
+                  <div class="set-clock">
+                    <input class="input" id="inClock" type="text" autocomplete="off" placeholder="e.g. 63:20" aria-label="Set the clock" aria-describedby="clockHint">
+                    <button class="btn" type="button" data-act="set-clock">Set</button>
+                  </div>
+                  <div class="added">
+                    <span class="added-label">Added time</span>
+                    <div class="stepper">
+                      <button class="btn btn-sq" type="button" data-act="added" data-d="-1" aria-label="Less added time">−</button>
+                      <output id="addedOut">+0</output>
+                      <button class="btn btn-sq" type="button" data-act="added" data-d="1" aria-label="More added time">+</button>
+                    </div>
+                  </div>
+                </div>
+                <p class="field-error" id="clockHint" role="status"></p>
+                <p class="band-note" id="offsetNote" hidden></p>
+              </div>
+
+              <div class="band score-band">
+                <div class="side home">
+                  <div class="side-head"><div class="badge home" id="deckHomeBadge"></div><div class="side-id"><span class="side-code" id="scHomeCode"></span><span class="side-name" id="scHomeName"></span></div><div class="side-reds" id="sideRedsHome"></div></div>
+                  <div class="side-score" id="scHome"></div>
+                  <button class="goal-btn" type="button" data-act="goal" data-team="0" id="goalHome"><span>Goal</span></button>
+                  <div class="side-adj">
+                    <button class="btn" type="button" data-act="score" data-team="0" data-d="-1">−1</button>
+                    <button class="btn" type="button" data-act="score" data-team="0" data-d="1">+1</button>
+                    <button class="btn btn-red" type="button" data-act="red" data-team="0"><i aria-hidden="true"></i>Red</button>
+                  </div>
+                </div>
+                <div class="side away">
+                  <div class="side-head"><div class="badge away" id="deckAwayBadge"></div><div class="side-id"><span class="side-code" id="scAwayCode"></span><span class="side-name" id="scAwayName"></span></div><div class="side-reds" id="sideRedsAway"></div></div>
+                  <div class="side-score" id="scAway"></div>
+                  <button class="goal-btn" type="button" data-act="goal" data-team="1" id="goalAway"><span>Goal</span></button>
+                  <div class="side-adj">
+                    <button class="btn" type="button" data-act="score" data-team="1" data-d="-1">−1</button>
+                    <button class="btn" type="button" data-act="score" data-team="1" data-d="1">+1</button>
+                    <button class="btn btn-red" type="button" data-act="red" data-team="1"><i aria-hidden="true"></i>Red</button>
+                  </div>
+                </div>
+                <label class="scorer"><span class="sr-only">Player for the next goal or red card (optional)</span><input class="input" id="inScorer" type="text" autocomplete="off" maxlength="30" placeholder="Player for the next goal or red card (optional)"></label>
+                <div class="band-foot">
+                  <p class="band-note">+1 and −1 skip the animation. Tap a red card to take it off.</p>
+                  <button class="btn btn-quiet btn-small" type="button" data-act="replay" id="replayBtn">Replay last goal</button>
+                </div>
+              </div>
+
+              <div class="band flow-band">
+                <div class="seg seg-period" role="group" aria-label="Match period">
+                  <button type="button" data-act="period" data-period="pre" aria-label="Pre-match">Pre</button>
+                  <button type="button" data-act="period" data-period="1h" aria-label="First half">1st</button>
+                  <button type="button" data-act="period" data-period="ht" aria-label="Half-time">HT</button>
+                  <button type="button" data-act="period" data-period="2h" aria-label="Second half">2nd</button>
+                  <button type="button" data-act="period" data-period="ft" aria-label="Full-time">FT</button>
+                </div>
+                <select class="select" id="periodMore" aria-label="Extra time and penalties">
+                  <option value="">ET / pens</option>
+                  <option value="brk">Break before extra time</option>
+                  <option value="et1">Extra time, 1st half</option>
+                  <option value="et2">Extra time, 2nd half</option>
+                  <option value="pens">Penalties</option>
+                </select>
+                <button class="btn btn-primary btn-advance" type="button" data-act="advance" id="advanceBtn">Kick off</button>
+              </div>
+            </section>
+
+            <section class="panel feed-panel" aria-labelledby="hFeed">
+              <div class="panel-head"><h2 id="hFeed">Follow a match</h2><p>Live from ESPN, free, no key needed</p></div>
+              <div class="linked" id="linkedBox">
+                <div class="linked-top">
+                  <span class="linked-label">Following</span>
+                  <span class="linked-status" id="linkedStatus"></span>
+                </div>
+                <div class="linked-title" id="linkedTitle">No match yet</div>
+                <div class="linked-meta" id="linkedMeta">Pick one from the list below.</div>
+                <div class="linked-actions">
+                  <button class="btn btn-small" type="button" data-act="feed-refresh" id="refreshBtn">Update now</button>
+                  <button class="btn btn-quiet btn-small" type="button" data-act="feed-unlink" id="unlinkBtn">Stop following</button>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field-label" id="compLabel">Competition</span>
+                <div class="chips comp-chips" id="compChips" role="group" aria-labelledby="compLabel"></div>
+              </div>
+              <div class="field">
+                <span class="field-label" id="dayLabel">Day</span>
+                <div class="day-row">
+                  <div class="seg seg-days" id="daySeg" role="group" aria-labelledby="dayLabel">
+                    <button type="button" data-act="day" data-shift="-1">Yesterday</button>
+                    <button type="button" data-act="day" data-shift="0">Today</button>
+                    <button type="button" data-act="day" data-shift="1">Tomorrow</button>
+                  </div>
+                  <input class="input date-input" id="dayInput" type="date" aria-label="Pick a day">
+                </div>
+              </div>
+              <div class="search">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <input class="input" id="fxSearch" type="search" autocomplete="off" placeholder="Find a team" aria-label="Find a team">
+              </div>
+              <div class="fixtures" id="fixtures" aria-live="polite"></div>
+              <div class="feed-settings">
+                <div class="field">
+                  <span class="field-label" id="pollLabel">Check ESPN every</span>
+                  <div class="seg" id="pollSeg" role="group" aria-labelledby="pollLabel" aria-describedby="pollNote">
+                    <button type="button" data-act="poll" data-secs="3">3 s</button>
+                    <button type="button" data-act="poll" data-secs="5">5 s</button>
+                    <button type="button" data-act="poll" data-secs="10">10 s</button>
+                    <button type="button" data-act="poll" data-secs="30">30 s</button>
+                  </div>
+                  <p class="note" id="pollNote">3 s is the fastest. ESPN only holds this data for a second before refreshing it, so goals show within seconds of ESPN having them. Checks run all match, half-time included.</p>
+                </div>
+                <label class="check"><input type="checkbox" id="kitToggle"><span>Use the kit colours each team is wearing</span></label>
+                <label class="check"><input type="checkbox" id="crestToggle"><span>Use the official club crests</span></label>
+                <p class="field-error" id="feedError" role="status"></p>
+              </div>
+            </section>
+          </div>
+
+          <!-- Stats -->
+          <div class="tab-panel" role="tabpanel" id="panel-stats" aria-labelledby="tab-stats" data-tab="stats" hidden>
+            <section class="panel stats-panel" aria-labelledby="hStats">
+              <div class="panel-head"><h2 id="hStats">Stats</h2><p id="statsHeadNote">Pick up to 8 to show under the scoreboard and on the big card</p></div>
+              <div class="chips stat-chips" id="statChips" role="group" aria-label="Stats to show"></div>
+              <div class="stats-grid">
+                <div class="poss" id="possBox">
+                  <div class="poss-top"><span class="poss-val" id="possHome"></span><span class="stat-name">Possession</span><span class="poss-val" id="possAway"></span></div>
+                  <input class="range poss-range" type="range" id="inPoss" min="0" max="100" step="1" aria-label="Home team possession, in percent">
+                </div>
+                <div class="strips" id="statCtl"></div>
+              </div>
+              <p class="note" id="statsFeedNote" hidden>Stats ESPN sends update by themselves, so their buttons are off. Switch to Manual to change them.</p>
+            </section>
+          </div>
+
+          <!-- Teams -->
+          <div class="tab-panel" role="tabpanel" id="panel-teams" aria-labelledby="tab-teams" data-tab="teams" hidden>
+            <section class="panel teams-panel" aria-labelledby="hTeams">
+              <div class="panel-head"><h2 id="hTeams">Teams and labels</h2><p id="teamsNote">Following a match fills these in</p></div>
+              <div class="teams-grid">
+                <div class="team-edit home">
+                  <div class="te-title">Home</div>
+                  <div class="te-grid">
+                    <label class="field"><span class="field-label">Name</span><input class="input" id="inHomeName" type="text" maxlength="40" autocomplete="off"></label>
+                    <label class="field"><span class="field-label">Code</span><input class="input code-input" id="inHomeCode" type="text" maxlength="4" autocomplete="off"></label>
+                    <label class="field"><span class="field-label">Colour</span><input id="inHomeColor" type="color"></label>
+                  </div>
+                  <div class="crest-row">
+                    <div class="badge home" id="prevHome"></div>
+                    <label class="btn file-btn"><input class="sr-only" id="inHomeCrest" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif">Upload crest</label>
+                    <button class="btn btn-quiet" type="button" data-act="crest-clear" data-team="0" id="clearHome">Remove</button>
+                  </div>
+                  <p class="field-error" id="crestErrHome" role="status"></p>
+                </div>
+                <div class="team-edit away">
+                  <div class="te-title">Away</div>
+                  <div class="te-grid">
+                    <label class="field"><span class="field-label">Name</span><input class="input" id="inAwayName" type="text" maxlength="40" autocomplete="off"></label>
+                    <label class="field"><span class="field-label">Code</span><input class="input code-input" id="inAwayCode" type="text" maxlength="4" autocomplete="off"></label>
+                    <label class="field"><span class="field-label">Colour</span><input id="inAwayColor" type="color"></label>
+                  </div>
+                  <div class="crest-row">
+                    <div class="badge away" id="prevAway"></div>
+                    <label class="btn file-btn"><input class="sr-only" id="inAwayCrest" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif">Upload crest</label>
+                    <button class="btn btn-quiet" type="button" data-act="crest-clear" data-team="1" id="clearAway">Remove</button>
+                  </div>
+                  <p class="field-error" id="crestErrAway" role="status"></p>
+                </div>
+              </div>
+              <div class="te-grid match-labels">
+                <label class="field"><span class="field-label">Competition</span><input class="input" id="inComp" type="text" maxlength="40" autocomplete="off" list="compList"></label>
+                <label class="field"><span class="field-label">Kick-off</span><input class="input" id="inKickoff" type="text" maxlength="5" autocomplete="off" inputmode="numeric" placeholder="20:00"></label>
+              </div>
+              <datalist id="compList"></datalist>
+              <p class="note">Before kick-off, the scoreboard counts down to this time. Changing a colour or crest here stops the live feed from replacing it.</p>
+            </section>
+          </div>
+
+          <!-- Layout -->
+          <div class="tab-panel" role="tabpanel" id="panel-layout" aria-labelledby="tab-layout" data-tab="layout" hidden>
+            <section class="panel screen-panel" aria-labelledby="hScreen">
+              <div class="panel-head"><h2 id="hScreen">Layout</h2><p>Sizes and positions. You can also drag things in the preview.</p></div>
+              <div class="field size-all">
+                <div class="field-label"><span>Overall size</span><output id="scaleOut"></output></div>
+                <input class="range" type="range" id="inScale" min="50" max="160" step="5" aria-label="Size of the whole scoreboard">
+              </div>
+              <div class="list">
+                <div class="item">
+                  <div class="item-row">
+                    <button class="item-name" type="button" data-act="expand" aria-expanded="false" aria-controls="bodyBug">
+                      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <span>Scoreboard</span>
+                    </button>
+                    <div class="seg seg-sm" role="group" aria-label="Scoreboard">
+                      <button class="on" type="button" data-act="show" data-key="bug" data-val="1">Show</button>
+                      <button type="button" data-act="show" data-key="bug" data-val="0">Off</button>
+                    </div>
+                  </div>
+                  <div class="item-body" id="bodyBug">
+                    <div class="field">
+                      <div class="field-label"><span>Size</span><output id="bugSizeOut"></output></div>
+                      <input class="range" type="range" id="inBugSize" min="60" max="150" step="5" aria-label="Scoreboard size">
+                    </div>
+                    <div class="field">
+                      <div class="field-label"><span>Position</span></div>
+                      <div class="seg">
+                        <button type="button" data-act="bug-pos" data-pos="left">Top left</button>
+                        <button type="button" data-act="bug-pos" data-pos="centre">Top centre</button>
+                        <button type="button" data-act="bug-pos" data-pos="right">Top right</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="item">
+                  <div class="item-row">
+                    <div class="item-name static"><span>Stats under scoreboard<small>Tucks away while the big card is up</small></span></div>
+                    <div class="seg seg-sm" role="group" aria-label="Stats under scoreboard">
+                      <button class="on" type="button" data-act="show" data-key="drawer" data-val="1">Show</button>
+                      <button type="button" data-act="show" data-key="drawer" data-val="0">Off</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="item">
+                  <div class="item-row">
+                    <button class="item-name" type="button" data-act="expand" aria-expanded="false" aria-controls="bodyCard">
+                      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <span>Big stats card</span>
+                    </button>
+                    <div class="seg seg-sm" role="group" aria-label="Big stats card">
+                      <button class="on" type="button" data-act="show" data-key="card" data-val="show">Show</button>
+                      <button class="on" type="button" data-act="show" data-key="card" data-val="auto">Auto</button>
+                      <button type="button" data-act="show" data-key="card" data-val="off">Off</button>
+                    </div>
+                  </div>
+                  <div class="item-body" id="bodyCard">
+                    <p class="note">Auto puts the card up at half-time, before extra time and at full-time.</p>
+                    <div class="field">
+                      <div class="field-label"><span>Size</span><output id="cardSizeOut"></output></div>
+                      <input class="range" type="range" id="inCardSize" min="60" max="130" step="5" aria-label="Big stats card size">
+                    </div>
+                    <button class="btn" type="button" data-act="card-home">Move it to bottom centre</button>
+                  </div>
+                </div>
+              </div>
+              <div class="layout-foot">
+                <button class="btn btn-quiet" type="button" data-act="reset" id="resetBtn">New match</button>
+                <p class="note">Clears the score, stats, goals and cards. Teams and layout stay.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<dialog class="keys-dialog" id="keysDialog" aria-labelledby="hKeys">
+  <div class="keys-head"><h2 id="hKeys">Keyboard shortcuts</h2><button class="btn btn-quiet btn-small" type="button" data-act="keys-close">Close</button></div>
+  <dl class="keys-list">
+    <div><dt><kbd>Space</kbd></dt><dd>Start or pause the match clock</dd></div>
+    <div><dt><kbd>H</kbd></dt><dd>Goal for the home team</dd></div>
+    <div><dt><kbd>A</kbd></dt><dd>Goal for the away team</dd></div>
+    <div><dt><kbd>O</kbd></dt><dd>Put the scoreboard on or off screen</dd></div>
+    <div><dt><kbd>P</kbd></dt><dd>Switch the monitor between Live output and Preview</dd></div>
+    <div><dt><kbd>U</kbd></dt><dd>Undo the last change</dd></div>
+    <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd>Match, Stats, Teams and Layout tabs</dd></div>
+    <div><dt><kbd>Esc</kbd></dt><dd>Back to all overlays</dd></div>
+  </dl>
+  <p class="note">Shortcuts work when you’re not typing in a box. The scoreboard ones work on its page.</p>
+</dialog>
+
+<script src="/match.js"></script>
+<script src="/stage.js"></script>
+<script src="/scoreboard.js"></script>
+<script src="/overlays.js"></script>
+<script src="/connect.js"></script>
+<script src="/hub.js"></script>
+<script src="/scoreboard-control.js"></script>
+</body>
+</html>
