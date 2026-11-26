@@ -1,31 +1,127 @@
 # Overlay hub
 
-One control app and one OBS link for all your stream overlays. You set each overlay up, check it in the preview, then put it on screen. The first overlay is a live football scoreboard that follows a real match by itself from ESPN’s free data, or can be run completely by hand. More overlays plug into the same hub later.
+One control app for all your stream overlays, for one streamer or several. Each streamer gets their own overlays, their own OBS link and their own live match. You're the owner; editors you approve can run overlays for the streamers you choose. You set an overlay up, check it in the preview, then put it on screen. The first overlay is a live football scoreboard that follows a real match from ESPN’s free data, or runs completely by hand.
 
-![The hub: every overlay as a tile, with the preview monitor](docs/hub.png)
+![The hub, with the streamer switcher open](docs/hub.png)
 
 | Address | What it is |
 | --- | --- |
-| `/control` | The hub, for phone or laptop: every overlay, the preview monitor and each overlay’s controls |
-| `/overlay` | The one page OBS shows: 1920×1080, see-through, every overlay on it |
+| `/control` | The hub, on phone or laptop |
+| `/overlay/<code>` | A streamer’s OBS page: 1920×1080, see-through, every overlay of theirs. Copy it from the hub. |
+| `/overlay` | The old link. It keeps showing the first streamer until you reset that streamer’s link. |
 
-Both pages connect to one small server (Node.js with Express and ws). Every change goes to every open page over a WebSocket straight away, from any device.
+The server is Node.js with Express and ws. Changes reach every open page over a WebSocket straight away. Only what changed is sent, compressed, so traffic stays tiny.
+
+## Streamers
+
+- **Switch streamer** from the name at the top left. Everything below it (tiles, preview, controls, the OBS link) switches to that streamer. A red dot in the list means something of theirs is on screen.
+- **Add streamer** in the same menu. New streamers start with everything off screen.
+- **Manage streamers** to rename one, copy their OBS link, reset their link, or remove them.
+  - **Reset link** makes a new link and stops the old one working straight away. Use it if a link gets shared by mistake, then paste the new link into that streamer’s OBS.
+  - **Remove** deletes the streamer and everything of theirs.
+- Each streamer’s live scoreboard is completely separate: their own match, score, clock, teams, layout and stream delay. If two streamers follow the same match, the server asks ESPN once and shares the answer.
+- The hub holds up to 10 streamers and 30 connected devices at once, to stay inside the free plan.
+
+## People: you and your editors
+
+- **You're the owner.** Sign in on the Owner tab with your `CONTROL_KEY` (or an owner password you set in Settings, Passwords). The `CONTROL_KEY` always works, so you can't lock yourself out.
+- **Editors** sign in on the Editor tab with their name and the editor password you give them, then wait. You see their request in Settings, People, and a red number on the cog tells you someone's waiting.
+- **When you accept,** you choose:
+  - which streamers they can run
+  - how long their access lasts: 1 hour, 24 hours, 7 days, 30 days, or never expires
+  When it runs out they're locked out and can ask again.
+- **A device you've approved** signs back in without asking you again. A new device asks you once.
+- **Editors can** run overlays, the scoreboard, teams, sizes and positions for their streamers, and hide everything.
+- **Editors can't** use Links, Activity, People, passwords, backups, overlay look, uploads, the ESPN check speed, or add, remove or reset streamers. All of that is hidden from them and refused by the server too.
+- **People** also shows who's online, when everyone was last seen, which devices they use, and 30 days of sign-in history. Remove someone and they're locked out straight away.
+- **Wrong passwords** slow down after a few tries, and requests nobody answers are declined after 24 hours.
 
 ## The hub
 
-- **Tiles.** Each overlay is a rounded tile with its live status (for the scoreboard, the score and minute) and a **Show / Off** switch. Tap a tile to open its page. Lower third, Countdown and Alerts are placeholders for overlays still to come.
-- **Back arrow.** Each overlay’s page has a back arrow at the top left, and tabs for its settings.
-- **Preview monitor.** A plain, square 1920×1080 screen.
-  - **Live output** shows exactly what viewers see. **Preview** shows overlays as if they were on screen, so you can set one up before it goes live.
-  - Opening an overlay that’s off screen switches to Preview; putting it on screen switches back to Live output.
-  - The background can be **Checker** (see-through), **Dark** or **Light**. **Safe area** draws the edge that TVs and phones might crop.
-- **Undo.** Goals, red cards, period changes, setting the clock and New match show a pop-up with **Undo**. If a goal is undone, its animation is dropped or cut short on stream too.
-- **Pop-ups** when ESPN finds a goal or a red card, or another device makes one.
-- **Keyboard shortcuts** on a laptop. They don’t work while you’re typing in a box.
+- **Tiles.** Each overlay is a tile with its live status and a Show / Off switch. Lower third, Countdown and Alerts are placeholders for overlays still to come.
+- **Overlay pages.** Each overlay’s page has a back arrow at the top left and tabs.
+- **Preview.**
+  - **Live output** shows exactly what viewers see. **Preview** shows overlays as if they were on screen, so you can set one up first.
+  - The background can be Checker, Dark or Light, and **Safe area** shows the edge that might get cropped.
+- **Undo** after goals, red cards, period changes, setting the clock and New match.
+- **Pop-ups** when a goal or red card comes in from Live or another device.
+- **Updates.** After an update, the OBS overlays reload themselves. The hub offers a Reload button.
+- **Mini score.** The score and minute stay in the top bar on every page.
+- **Hide everything,** next to the preview controls, takes every overlay for the current streamer off screen at once.
+- **Under the preview:** three tabs.
+  - **OBS link:** the streamer's overlay link.
+  - **Links** (owner only): your streaming and production links as buttons that open in a new tab. Add, reorder or remove them there.
+  - **Activity** (owner only): everything that happened on this streamer, with who did it: you, an editor, or Live.
+- **Hide link.** Manage streamers has a Hide link for each streamer: a one-button page they can keep on their phone to take their own overlays off screen, without signing in.
+- **Tiles** show a small live picture of each overlay.
+
+## Canvas
+
+Draw and place things on the stream, on the same OBS link.
+
+- **Draw on the preview:**
+  - pen in 6 colours and any thickness, arrows, an eraser (tap a line), undo and clear
+  - fading ink that disappears after a few seconds
+  - a laser pointer that shows only while you hold it
+  - a spotlight that dims everything but one spot
+- **Add:**
+  - text, web pages, YouTube videos and QR codes
+  - a tactics pitch to draw plays on, and pictures from the library
+  New things start hidden. Choose a place (9 spots), a size, a timer that hides them, and which sits in front, then press Show.
+- **Library:** the owner uploads pictures (up to 8 MB) and MP3s (up to 30 MB), and must tick that they have the right to use them. Editors can use everything in it but can't add or delete; their files show as locked.
+- **Music:** play, pause, next and repeat, with volume.
+  - The playlist has a space limit. When a new song won't fit, the oldest unpinned song that isn't playing is removed; pin songs to keep them.
+  - To hear music on stream, tick "Control audio via OBS" on the Browser source.
+- **Saved boards:** save the drawing and everything placed, and load it again later. Up to 10.
+
+## Stream Desk
+
+Everyday widgets, each with its own Show switch, place (9 spots) and size.
+
+- **Timers:**
+  - count down or up, with text for when they hit zero
+  - a **Matchday countdown** to a date and time
+- **Counters:** with a step and an optional goal bar.
+- **Text:** a headline, or scrolling.
+- **Lists:**
+  - **to-do:** tick things off
+  - **shopping:** with prices and a budget showing what's left, or how far over
+  - **top list:** numbered
+  - **tier list:** S to D
+- **My match:** your own scoreboard, with +1 for each side, undo, and full time adding the result to a session tally (W, D, L). Type a squad and "Pick two teams" splits it at random.
+
+## Chat (owner)
+
+The Chat tab under the preview reads a streamer's Twitch chat anonymously and read-only: type their channel and press Read chat.
+
+- **Chat commands** are off by default. Turned on, they only work for the Twitch names on your list (marzvise to start with):
+  - !show puts the scoreboard on screen
+  - !hide takes everything off screen
+  - !goalhome and !goalaway add goals, in Manual only
+- Twitch could change or stop anonymous chat reading; the rest of the hub carries on without it.
+
+## Settings (the cog)
+
+- **Personal,** for this device only: 5 themes (Crimson, Midnight, Pitch, Ultraviolet, Daylight), big buttons, vibrate on goals, bringing the tips back, and signing out.
+- **Tiles:** order them Auto (on screen first, then overlays you can preview, then ones still to come) or Custom, and rename any tile.
+- **Overlay look,** for the current streamer: font (Barlow, Oswald or Saira), rounded or sharp corners, how overlays come on and go off (slide, fade or wipe), and the stacking order when overlays overlap.
+- **People** and **Passwords:** as above.
+- **Backup:** download one streamer or everything as a file, and restore from a file. People and passwords are never in a backup.
+  - The hub also keeps a copy on your device every 10 minutes.
+  - If the server ever starts empty, a banner offers to put your setup back from that copy.
+- **Storage and traffic:**
+  - uploads against the 700 MB cap, with each streamer's share
+  - this month's traffic against the 8 GB budget, with warnings at 70% and 90%
+  At 100%, big files pause until the 1st. Scoreboard updates are tiny, so the scoreboard keeps working.
+- **Updating:** tells you whether it's safe to update, which means nobody has anything on screen.
+
+**Built-in links:** put links in `links.json` (like `[{ "name": "Twitch dashboard", "url": "https://dashboard.twitch.tv" }]`). They're added to the Links tab the first time it's empty.
+
+**Backups** don't include uploaded pictures and music; those stay on the volume.
 
 | Key | What it does |
 | --- | --- |
-| Space | Start or pause the match clock |
+| Space | Start or pause the clock (Manual) |
 | H / A | Goal for the home / away team |
 | O | Put the scoreboard on or off screen |
 | P | Switch the monitor between Live output and Preview |
@@ -33,43 +129,118 @@ Both pages connect to one small server (Node.js with Express and ws). Every chan
 | 1 to 4 | Match, Stats, Teams, Layout tabs |
 | Esc | Back to all overlays |
 
-- New overlays start **off screen**, and the hub remembers your tab, competition and preview settings on each device.
-
 ## The live scoreboard
 
-![The scoreboard page during a match](docs/scoreboard-page.png)
+![The scoreboard page in Live mode](docs/scoreboard-page.png)
 
-- **Follow a match.** Pick a competition and a day, find a team if you like, and press **Follow**. Competitions: Premier League, Championship, League One, League Two, FA Cup, Carabao Cup, Champions League, Europa League and Conference League. Team names, codes, the kits each side is wearing, official crests and kick-off fill in by themselves.
-- From then on the scoreboard follows the match: score and scorers, penalties and own goals, red cards, stats, the period and the clock, extra time and penalty shoot-outs.
-- **Official logos.** Club crests and competition logos come from ESPN, so every team ESPN has a crest for gets it. A few non-league clubs have none on ESPN; they get a coloured badge, and you can upload a crest in **Teams**.
-- **Goal button.** Press **Goal** the moment it goes in and the animation plays straight away. When ESPN has it, the overlay shows who scored.
-- **Manual.** One switch stops ESPN completely; nothing changes unless you change it.
-- **Stats you choose.** Up to 8 of 14: possession, shots, on target, corners, fouls, yellow cards, offsides, saves, blocked shots, passes, pass accuracy, tackles, interceptions and crosses. Stats from ESPN update by themselves.
-- **Big stats card** comes up at half-time, before extra time and at full-time, with scorers and red cards.
-- **Layout.** Overall size, plus sizes and positions for the scoreboard and the big card. You can drag both in the preview.
+**Live and Manual**
 
-![The overlay in OBS](docs/overlay.png)
+- **Live** follows a match from ESPN: score and scorers, penalties and own goals, red cards, stats, the period, the clock, extra time and shoot-outs. The match runs itself, so the manual controls step aside. You keep:
+  - Goal and Red, for when you see something first
+  - +1 and −1
+  - added time
+  - the stream delay
+- **Manual** never changes by itself and asks ESPN nothing. The clock, period and kick-off controls come back.
+
+**Stream delay**
+
+Your stream runs behind the real match, so Live would show goals before viewers see them. Set how many seconds your stream is behind, and Live waits that long before anything goes on screen. The clock runs the same amount behind. Use the −5, −1, +1 and +5 buttons to line it up with the picture, or No delay to clear it.
+
+**Following a match**
+
+- Pick a competition and a day, find a team, and press **Follow**. The competitions are Premier League, Championship, League One, League Two, FA Cup, Carabao Cup, Champions League, Europa League and Conference League.
+- A new match starts completely fresh: nothing (score, cards, stats, names, colours, crests) carries over from the last one. Your layout and your choice of stats stay.
+- Kick-off times show in the time zone you pick in Teams.
+
+**Teams and colours**
+
+- **Swatches.** Each team gets colour swatches from ESPN: the kit worn in this match, the club colour, a second colour and the kit trim. Tap one to use it; the kit swatch hands the colour back to Live. **Colour** picks anything else.
+- **Crests** are ESPN’s official club crests. If ESPN has none (some non-league clubs), the team gets a coloured badge, and you can upload one.
+
+**On the overlay**
+
+![The redesigned scoreboard](docs/overlay-bar.png)
+
+- **Accent colour.** The tab, progress line and card header take the competition’s colour, such as purple for the Premier League or orange for the Europa League. Or set your brand colour under Layout, Look.
+- **Score chip.** The score sits in a light chip. A thin line under the clock fills as the half goes on.
+- **Team names.** Layout sets the scoreboard to show codes (NFO), short names (Nottm Forest) or full club names (Nottingham Forest). ESPN fills in both names; you can change them in Teams.
+- **Scorers under each team,** with a ball icon, like “Rees 12’ 58’”. Layout sets them to Always, After goals (15 seconds after each goal) or Off.
+- **The goal moment.** The goal flash slides the new score in. Then the scoring side glows in its colour for about 10 seconds and its crest pops. You can turn the celebration off.
+- **Red cards.** The tab over each team shows who got sent off and when, like “Fofana 63’”, and the big card lists them too. Pressed by hand, a red card shows the team until ESPN names the player, then a quick second flash shows who it was.
+- **Stats.** Plain bars in each team's colour, under the bar and on the big card.
+  - Before kick-off, stats show 0, not dashes.
+  - Stats ESPN doesn’t send for a match are left out once it starts, instead of sitting at 0.
+- **Broadcast sheen.** A light sweep across the bar every minute or so. You can turn it off.
+- **Double-goal check.** A second goal for the same team within 10 seconds asks “Add another?”, so two people pressing at once can’t add two goals.
+
+![The goal moment](docs/overlay-goal.png)
+
+**Try a state in the preview**
+
+Pre-match counts down to kick-off, Live runs the clock, and the rest show added time, half-time and full-time. **Test animations** plays a goal with the scorer spotlight, the half-time banner, the added time board, a ruled-out goal and a red card. These only change your preview, never the stream.
+
+**Match moments** (each one can be turned off in Layout)
+
+- **Yellow cards** show on the match timeline. The tabs above the scoreboard stay for red cards only.
+- **Match timeline:** a 0 to 90 line at the bottom of the stats, with goals and cards where they happened and a marker for the current minute. It goes to 120 in extra time.
+- **Banners:** kick-off, half-time, second half, extra time and penalties each get a banner in the competition's colour.
+- **Added time board:** "+4 minutes added" flashes when added time goes up.
+- **No goal:** if ESPN takes a goal back (VAR or the referee), the score goes back down and a "No goal" flash names the player. A corrected scorer or minute doesn't count as a ruled-out goal.
+- **Scorer spotlight:** after a goal with a named scorer, a lower third shows their name, shirt number and team at the bottom left.
+- **Full-time splash:** a big full-time moment with both teams, the score and the scorers, then the stats card.
+- **ESPN warning:** if ESPN's data ever stops looking like a match, the hub says so and suggests switching to Manual, while Live keeps trying.
+
+**Extras tab**
+
+- **Centre card:** Line-ups (both XIs with shirt numbers and formation), Match info (kick-off, ground, referee), Form (last five results), Head-to-head (recent meetings) and Table (both teams highlighted). They come from ESPN when you follow a match. One shows at a time, where the stats card sits; press it again to take it off.
+- **Other scores ticker** along the bottom: the rest of today's games in the same competition, updated once a minute.
+- **Substitutions:** a small flash with who's on and who's off, from ESPN.
+- **Penalty shoot-out:** a dot per kick under each team during penalties. Live fills it in; you can also tap Scored or Missed.
+- **Autopilot:**
+  - puts the scoreboard on 15 minutes before kick-off with Match info or Line-ups
+  - takes that card off at kick-off
+  - takes everything off 5, 10 or 15 minutes after full time
+  Anything you change by hand stays, and Hide everything pauses it for 10 minutes.
+- **Scenes:** save how the overlay looks (what's showing, the card, the layout) and switch back with one tap. Up to 8.
+- **Follow my team** (owner): type a team; when nothing's being followed, the hub finds their match today and follows it by itself, up to 3 hours before kick-off.
+- **Practice match:** a pretend match plays in the preview in about a minute. Nothing goes on stream.
+- **Scoreboard style** (in Layout): Broadcast, Minimal, Bold or Mini.
+
+**Handy extras**
+
+- **Copy result** (next to Update now) copies a tidy summary for Discord or X: the score, status, scorers, red cards and the stats on show.
+- **Quick bar on phones:** Goal home, On screen and Goal away stay pinned at the bottom of the screen.
+- **Goal buttons** flash when pressed, and a tick shows next to Connected when a change has saved.
 
 ### How fast it updates
 
-While it follows a match, the server checks ESPN **every 3 seconds**, all match long, half-time included. ESPN only holds this data for a second before refreshing it, so a goal reaches the overlay within about 3 seconds of ESPN having it. In a test against a stand-in for ESPN’s data, goals reached the OBS overlay 0.1 to 2.4 seconds after they appeared.
+While following a match, the server checks ESPN every 3 seconds, half-time included.
+- Goals reach the overlay within about 3 seconds of ESPN having them, plus your stream delay.
+- When several streamers follow different matches, checks spread out so the server never sends more than about one request a second.
+- Before kick-off it checks less often, and every 3 seconds from 30 minutes before.
+- After full-time it keeps checking for 3 minutes, then stops.
+- **Update now** always asks ESPN fresh.
 
-- Each check is a small request (about 12 KB) for the one match.
-- The big match summary (kits, exact half start times, the rest of the stats) loads alongside, every 30 seconds and straight away at kick-off, half-time and the second half, so it never holds up a goal.
-- The clock is lined up with the moment ESPN says each half started, so it doesn’t drift. Use the nudge buttons to line it up with a TV picture that runs behind.
-- Before kick-off it checks every 2 minutes, every 30 seconds from 3 hours before, and every 3 seconds from 30 minutes before.
-- After full-time it checks every 10 seconds for 3 minutes in case ESPN corrects anything, then stops. **Update now** still works.
-- If ESPN doesn’t answer, it tries again after 3 seconds, then backs off up to 30 seconds. If ESPN asks for fewer requests, it slows to every 30 seconds for a minute and says so.
-- You can choose 3, 5, 10 or 30 seconds in the Match tab. 3 is the fastest and the default.
+ESPN’s data is free with no key, but it isn’t an official API and could change without warning. If it breaks, switch to Manual and carry on.
 
-ESPN’s data is free and needs no key or account, but it isn’t an official public API. ESPN could change it or limit it without warning. If that happens, switch to **Manual** and carry on by hand.
+## Updating from the last version
 
-### How live and manual work together
+1. Upload every file in this folder over the top of your GitHub repository. Nothing needs deleting.
+2. Wait for Northflank to finish deploying, ideally when nobody’s live.
+3. Open the hub and sign in on the **Owner** tab with your `CONTROL_KEY`. The old “enter the control key” box is gone, so every device signs in once.
+4. To add editors, set an editor password in Settings, Passwords, then give them the hub link and that password.
+5. From the version before streamer tabs: your teams and layout move into a streamer called “My stream” by themselves. Your OBS keeps working on the old `/overlay` link until you swap in the new one from the OBS link tab.
 
-- Goals and red cards you press by hand stay on screen for up to 5 minutes while ESPN catches up. If ESPN never shows them (a goal ruled out by VAR, say), they come off by themselves.
-- Taking a goal or card off with **−1** or by tapping it keeps it off, even if ESPN still has it.
-- If you end a half before ESPN does, your choice holds for 3 minutes while ESPN catches up.
-- Typing a colour or uploading a crest yourself stops ESPN replacing it.
+## PC mode: a free backup on your own computer
+
+If the online server ever has a problem mid-stream, run the hub on your streaming PC instead.
+
+1. Install Node.js 18 or newer from nodejs.org, once.
+2. Double-click **start-pc-mode.bat** on Windows, or **start-pc-mode.command** on a Mac. The first run installs what it needs.
+3. Type a control key when it asks. The hub opens in your browser; sign in on the Owner tab with that key.
+4. Restore your setup in Settings, Backup: from a backup file, or from this computer's own copy if you've used the hub here before.
+5. In OBS, point the Browser source at `http://localhost:8080/overlay/<code>` (copy it from the OBS link tab).
+6. Your phone can control it on the same Wi-Fi with one of the "On your network" links shown in the window.
 
 ## Try it on your computer
 
@@ -80,77 +251,78 @@ npm install
 CONTROL_KEY=pick-a-key npm start
 ```
 
-Open http://localhost:8080/control, and http://localhost:8080/overlay in another window.
-
-On Windows PowerShell: `npm install`, then `$env:CONTROL_KEY="pick-a-key"; npm start`
+Open http://localhost:8080/control. On Windows PowerShell: `npm install`, then `$env:CONTROL_KEY="pick-a-key"; npm start`
 
 ## Put it on GitHub
 
-Upload everything in this folder to the repository and keep the layout: `server.js`, `espn.js`, `package.json`, `package-lock.json` and `Dockerfile` at the top, the pages in `public/`, the screenshots in `docs/`. Don’t upload `node_modules` or `data`; they’re made on the server.
+Upload everything in this folder and keep the layout: `server.js`, `espn.js`, `package.json`, `package-lock.json` and `Dockerfile` at the top, the pages in `public/`, the screenshots in `docs/`. Don’t upload `node_modules` or `data`.
 
-**Updating from the old scoreboard:** delete `feed.js`, `public/control.js` and `public/control.css` from the repository, then upload the new files over the top. `package-lock.json` must be there, because the build installs Express and ws from it.
+## Deploy on Northflank (free plan)
 
-## Deploy on Northflank
+1. Connect GitHub to Northflank and create a **Combined** service from the repository, with **Dockerfile** as the build type.
+2. Keep port **8080** as a public HTTP port. WebSockets work on it as normal.
+3. Pick the smallest plan that runs it smoothly; 512 MB is a safe size and well inside the free allowance.
+4. Add the runtime variable `CONTROL_KEY`. That’s your password for the hub.
+5. Attach a **1 GB volume** at `/app/data`, so streamers, overlays, teams and crests survive restarts and updates.
+6. Optional: a health check on `/healthz`.
 
-1. Connect your GitHub account to Northflank.
-2. Create a new service and choose **Combined**, so it builds and deploys every time you push.
-3. Pick the repository and branch, and choose **Dockerfile** as the build type.
-4. Check the port: the Dockerfile exposes **8080**. It should be HTTP and public. WebSockets work on it as normal.
-5. Add a runtime variable `CONTROL_KEY`: a password. Whoever runs the hub types it in once on each device.
-6. Optional: add a health check on the path `/healthz`.
-7. Optional: attach a volume mounted at `/app/data`, so the overlays, teams and crests survive restarts and redeploys. Without one, they reset when the service restarts.
-8. Deploy. The hub is at `https://<your service address>/control` and the overlay at `https://<your service address>/overlay`.
-
-If the service still has `API_FOOTBALL_KEY` or `RAPIDAPI_KEY` from the old version, you can delete them. Nothing uses them now.
-
-Run a single instance. The overlays live in the server’s memory, so two instances would each keep their own copy.
+Run a single instance; everything lives in the one server’s memory.
 
 ## Add it to OBS
 
 1. Add a **Browser** source.
-2. Set the URL to `https://<your service address>/overlay`.
+2. Paste that streamer’s link from the OBS link box under the preview.
 3. Set the width to `1920` and the height to `1080`.
 
-That one source shows every overlay in the hub. If the connection drops, the clock keeps running and the page reconnects by itself. After an update, right-click the source, choose **Properties**, and press **Refresh cache of current page**.
+The source shows every overlay for that streamer. If the connection drops, the clock keeps running and it reconnects by itself. After an update it reloads itself, so you don’t need to refresh it.
 
 ## Settings
 
 | Variable | What it does |
 | --- | --- |
-| `CONTROL_KEY` | Password for making changes. Without it, anyone with the hub link can change your overlays. |
-| `MATCH_TIMEZONE` | Time zone for kick-off times. Default `Europe/London`. |
+| `CONTROL_KEY` | Password for the hub. Without it, anyone with the link can change your overlays. |
+| `MATCH_TIMEZONE` | Default time zone for kick-off times on new streamers. Default `Europe/London`. |
 | `PORT` | Port to listen on. Default `8080`. |
 | `DATA_DIR` | Where everything is saved. Default `data/` next to `server.js`. |
-| `ESPN_BASE` | Only for testing against a stand-in ESPN server. Leave it unset. |
+| `ESPN_BASE` | Only for testing against a stand-in ESPN. Leave it unset. |
 
 ## Adding another overlay later
 
-Each overlay has the same four parts:
+Each overlay has four parts:
+1. A renderer that draws into the 1920×1080 stage (like `public/scoreboard.js` and `public/scoreboard.css`).
+2. An entry in `public/overlays.js`.
+3. Its state on the server: an entry in `MODULES` in `server.js`.
+4. Its tile and page in the hub: `TILES` in `public/hub.js`, a section in `public/control.html`, and its controls in their own script that calls `Hub.module()`.
 
-1. A renderer that draws it into the 1920×1080 stage (like `public/scoreboard.js` and `public/scoreboard.css`).
-2. An entry in `public/overlays.js`, so the OBS page and the hub load it.
-3. Its state on the server: an entry in `modules` in `server.js`, with its defaults and what the hub may change.
-4. Its tile and page in the hub: an entry in `TILES` in `public/hub.js`, a `view…` section in `public/control.html`, and its controls in their own script (like `public/scoreboard-control.js`) that call `Hub.module()`.
-
-The hub already handles the preview, Show / Off, saving, undo, pop-ups and keeping every device in step.
+The hub already handles streamers, the preview, Show / Off, saving, undo, pop-ups and keeping every device in step.
 
 ## Files
 
 ```
-server.js                     the server: pages, WebSocket updates, saving, overlay state
-espn.js                       ESPN live data: match lists, following one match, goals, cards, stats, clock
-public/overlay.html           the page OBS shows, with every overlay
+server.js                     the server: streamers, pages, WebSocket updates, saving
+espn.js                       ESPN live data: match lists, following a match, stream delay, shared requests
+public/overlay.html           a streamer's OBS page
 public/control.html           the hub
-public/hub.js                 the hub: tiles, preview monitor, back arrow, undo, pop-ups, shortcuts, sync
+public/hub.js                 the hub: streamers, tiles, preview, back arrow, undo, pop-ups, shortcuts, sync
 public/hub.css                hub styles
-public/connect.js             the WebSocket link, with automatic reconnects
+public/connect.js             the WebSocket link: changes only, reconnects, reloads after updates
 public/stage.js               the 1920×1080 stage every overlay draws into
 public/overlays.js            the list of overlays
 public/match.js               scoreboard rules shared by the server and the pages
 public/scoreboard.js          draws the scoreboard overlay
 public/scoreboard.css         scoreboard overlay styles
 public/scoreboard-control.js  the scoreboard's page in the hub
+public/settings.js            the settings behind the cog: personal, tiles, look, people, passwords, backup, storage, updating
+public/canvas.js, canvas-control.js  Canvas: the overlay, and its page in the hub
+public/desk.js, desk-control.js      Stream Desk: the overlay, and its page in the hub
+public/extras-model.js        the shape of Canvas and Stream Desk, shared by the server and the browser
+public/extras.css             Canvas and Stream Desk styles
+public/vendor/qrcode.js       QR codes (MIT licence)
+chat.js                       reads Twitch chat
+links.json                    your built-in links
+public/hide.html              each streamer's one-button Hide my overlays page
+start-pc-mode.bat / .command  PC mode for Windows and Mac
 Dockerfile                    build for Northflank or any Docker host
 ```
 
-Fonts come from Google Fonts (Barlow), and crests and logos from ESPN, so the OBS machine needs internet access, which a stream has anyway.
+Fonts come from Google Fonts and crests and competition logos from ESPN, so the OBS machine needs internet access.

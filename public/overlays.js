@@ -6,6 +6,16 @@
 (() => {
   'use strict';
   window.OverlayRegistry = {
+    canvas: {
+      name: 'Canvas',
+      mount: (stage, opts) => window.CanvasOverlay.mount(stage, opts),
+      normalize: (state) => window.ExtrasModel.canvasNormalize(state),
+    },
+    desk: {
+      name: 'Stream Desk',
+      mount: (stage, opts) => window.DeskOverlay.mount(stage, opts),
+      normalize: (state) => window.ExtrasModel.deskNormalize(state),
+    },
     scoreboard: {
       name: 'Live scoreboard',
       mount: (stage, opts) => window.Scoreboard.mount(stage, opts),

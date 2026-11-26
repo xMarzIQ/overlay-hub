@@ -7,12 +7,14 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700&family=Oswald:wght@500;600;700&family=Saira+Condensed:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="/scoreboard.css">
+<link rel="stylesheet" href="/extras.css">
 <style>
   /* Add this page to OBS as a Browser source at 1920×1080. Everything but the overlays is see-through. */
   html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
   .viewport { position: fixed; inset: 0; overflow: hidden; }
+  .is-gone .viewport { display: none; }
 </style>
 </head>
 <body>
@@ -20,18 +22,39 @@
 <script src="/match.js"></script>
 <script src="/stage.js"></script>
 <script src="/scoreboard.js"></script>
+<script src="/extras-model.js"></script>
+<script src="/vendor/qrcode.js"></script>
+<script src="/canvas.js"></script>
+<script src="/desk.js"></script>
 <script src="/overlays.js"></script>
 <script src="/connect.js"></script>
 <script>
   // One page for every overlay: each one draws into the same 1920×1080 stage.
+  // The code in the link (/overlay/<code>) decides whose overlays show here; /overlay alone is the first streamer.
+  const code = decodeURIComponent((location.pathname.split('/')[2] || '').trim());
   const stage = Stage.create(document.getElementById('viewport'));
   const shown = {};
   Object.entries(OverlayRegistry).forEach(([id, o]) => { shown[id] = { o, view: o.mount(stage) }; });
   const draw = (id, state) => { const m = shown[id]; if (m) m.view.render(m.o.normalize(state)); };
   Live.connect({
-    onHello: (msg) => Object.entries(msg.modules || {}).forEach(([id, state]) => draw(id, state)),
+    onMessage: (msg) => { if (msg.type === 'laser' && shown.canvas && shown.canvas.view.laser) shown.canvas.view.laser(msg.on, msg.x, msg.y); },
+    onHello: (msg) => {
+      document.body.classList.remove('is-gone');
+      if (msg.streamer) {
+        Scoreboard.setCrestBase(`/api/crest/${msg.streamer.id}`);
+        // This streamer's look for every overlay: font, corners, and how overlays come on and go off
+        const look = msg.streamer.look || {};
+        stage.el.dataset.font = look.font || 'barlow';
+        stage.el.dataset.corners = look.corners || 'rounded';
+        stage.el.dataset.anim = look.anim || 'slide';
+        // Stacking order: the first overlay in the list sits on top
+        (msg.streamer.stack || []).forEach((id, i, all) => { const m = shown[id]; if (m && m.view.el.root) m.view.el.root.style.zIndex = String(all.length - i); });
+      }
+      Object.entries(msg.modules || {}).forEach(([id, state]) => draw(id, state));
+    },
     onState: draw,
-  });
+    onGone: () => document.body.classList.add('is-gone'), // the link was reset or the streamer removed
+  }, { role: 'overlay', code });
 </script>
 </body>
 </html>

@@ -4,7 +4,7 @@ FROM node:22-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
-COPY server.js espn.js ./
+COPY server.js espn.js chat.js links.json ./
 COPY public ./public
 
 ENV NODE_ENV=production

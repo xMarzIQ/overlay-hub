@@ -14,14 +14,14 @@
     brk: 'Start extra time', et1: 'End ET 1st half', et2: 'End match', pens: 'End match', ft: 'New match',
   };
   const PERIOD_NAMES = { pre: 'Pre-match', '1h': '1st half', ht: 'Half-time', '2h': '2nd half', brk: 'Break', et1: 'Extra time, 1st half', et2: 'Extra time, 2nd half', pens: 'Penalties', ft: 'Full-time' };
-  const PATCHABLE = ['mode', 'onAir', 'scale', 'clockOffset', 'comp', 'compLogo', 'kickoff', 'kickoffAt', 'home', 'away', 'period', 'note', 'clock',
-    'added', 'score', 'pens', 'stats', 'statsShown', 'goals', 'reds', 'anims', 'show', 'bug', 'card', 'writer', 'rev'];
+  const PATCHABLE = ['mode', 'onAir', 'scale', 'delay', 'tz', 'look', 'comp', 'compLogo', 'kickoff', 'kickoffAt', 'home', 'away', 'period', 'note', 'clock',
+    'added', 'score', 'pens', 'stats', 'statsShown', 'goals', 'reds', 'yellows', 'anims', 'show', 'bug', 'card', 'writer', 'rev', 'shoot', 'board', 'follow', 'auto', 'scenes'];
   const TABS = ['match', 'stats', 'teams', 'layout'];
 
   const el = {};
   [
     'chips', 'controls', 'resetBtn', 'sourceLine', 'sourceText',
-    'tally', 'readTime', 'readState', 'advanceBtn', 'clockBtn', 'clockBtnText', 'inClock', 'clockHint', 'addedOut', 'offsetNote', 'periodMore',
+    'tally', 'readTime', 'readState', 'advanceBtn', 'clockBtn', 'clockBtnText', 'inClock', 'clockHint', 'addedOut', 'delayOut', 'delayReset', 'periodMore',
     'deckHomeBadge', 'deckAwayBadge', 'scHomeCode', 'scAwayCode', 'scHomeName', 'scAwayName', 'scHome', 'scAway', 'sideRedsHome', 'sideRedsAway',
     'goalHome', 'goalAway', 'inScorer', 'replayBtn',
     'compChips', 'daySeg', 'dayInput', 'fxSearch', 'fixtures', 'linkedBox', 'linkedTitle', 'linkedStatus', 'linkedMeta', 'refreshBtn', 'unlinkBtn',
@@ -29,8 +29,8 @@
     'statChips', 'statsHeadNote', 'possBox', 'possHome', 'possAway', 'inPoss', 'statCtl', 'statsFeedNote',
     'inScale', 'scaleOut', 'inBugSize', 'bugSizeOut', 'inCardSize', 'cardSizeOut',
     'teamsNote', 'inHomeName', 'inHomeCode', 'inHomeColor', 'inHomeCrest', 'prevHome', 'clearHome', 'crestErrHome',
-    'inAwayName', 'inAwayCode', 'inAwayColor', 'inAwayCrest', 'prevAway', 'clearAway', 'crestErrAway',
-    'inComp', 'inKickoff', 'compList',
+    'inAwayName', 'inAwayCode', 'inAwayColor', 'inAwayCrest', 'prevAway', 'clearAway', 'crestErrAway', 'inHomeFull', 'inAwayFull',
+    'inComp', 'inKickoff', 'compList', 'inTz', 'swHome', 'swAway', 'inBrand',
   ].forEach((id) => { el[id] = $(id); });
 
   let live = null;          // the match as this page shows it (the hub's copy)
@@ -47,20 +47,27 @@
       live = s;
       if (first) { loadFixtures(false); }
       else if (before && before !== s) announce(before, s);
-      if (previewKey) {
-        const keep = previewState ? previewState.clock : null;
+      if (previewKey && previewKey !== 'test' && previewKey !== 'practice') {
+        const keep = previewState ? { clock: previewState.clock, kickoffAt: previewState.kickoffAt } : null;
         previewState = M.withSample(live, previewKey);
-        if (keep) previewState.clock = keep;
+        if (keep) Object.assign(previewState, keep);
       }
       syncControls();
     },
     onCommit(opts) { if (previewKey && !opts.keepPreview) stopPreview(); },
     previewState: () => (previewKey ? previewState : null),
-    sampleLabel: () => (previewKey ? M.SAMPLES[previewKey].label : ''),
+    sampleLabel: () => (previewKey === 'test' ? 'Test animations' : previewKey === 'practice' ? 'Practice match' : previewKey ? M.SAMPLES[previewKey].label : ''),
     tileSummary,
     keepOnUndo: (cur) => ({ feed: cur.feed, compKey: cur.compKey }),
     onKey,
     onShow() { loadFixtures(false); paintTabs(); },
+    onStreamer() {
+      previewKey = null;
+      previewState = null;
+      own.clear();
+      fixturesKey = '';
+      localFeedError('');
+    },
     onLock(b) {
       isBlocked = b;
       el.controls.inert = b;
@@ -90,7 +97,10 @@
     s.anims.filter((a) => !seen.has(a.id) && !own.has(a.id)).forEach((a) => {
       const team = M.nameOf(a.team === 0 ? s.home : s.away);
       const who = [a.name, a.minute].filter(Boolean).join(' ');
-      if (a.kind === 'goal') Hub.toast(`Goal for ${team}${who ? `: ${who}` : ''}`, { tone: 'goal' });
+      if (a.kind === 'goal') {
+        Hub.toast(`Goal for ${team}${who ? `: ${who}` : ''}`, { tone: 'goal' });
+        if (Hub.personal.vibrate && navigator.vibrate) navigator.vibrate([90, 50, 90]);
+      }
       else if (a.kind === 'scorer') Hub.toast(`${a.name} scored for ${team}`, { tone: 'goal' });
       else if (a.kind === 'red') Hub.toast(`Red card, ${team}${who ? `: ${who}` : ''}`, { tone: 'bad' });
     });
@@ -113,6 +123,153 @@
     previewState = null;
     syncControls();
     Hub.paintMonitor();
+  }
+
+  // Plays a goal, a scorer and a red card in this preview only, to check them before a stream.
+  function testAnimations() {
+    if (!live) return;
+    const base = M.copy(live);
+    base.onAir = true;
+    base.show = Object.assign({}, base.show, { bug: true });
+    const t = M.now();
+    const mk = (kind, team, name, minute) => ({ id: `test${M.newId()}`, kind, team, name, minute, t });
+    base.anims = live.anims.concat([mk('goal', 0, 'Test Player', '23’'), mk('banner', 0, 'HALF-TIME', ''), mk('added', 0, '+4', ''), mk('nogoal', 1, 'Second Player', '41’'), mk('red', 1, 'Third Player', '67’')]);
+    previewKey = 'test';
+    previewState = base;
+    syncControls();
+    Hub.paintMonitor();
+    setTimeout(() => { if (previewKey === 'test') stopPreview(); }, 20000);
+  }
+  // A tidy text summary for Discord or X: score, status, scorers, red cards and the stats on show.
+  function copyResult() {
+    const s = live;
+    const status = s.period === 'ft' ? (s.note === 'pens' && s.pens ? `full-time, ${s.pens[0]}–${s.pens[1]} on pens` : s.note === 'aet' ? 'after extra time' : 'full-time')
+      : s.period === 'pre' ? 'before kick-off' : s.period === 'ht' ? 'half-time' : M.inPlay(s) ? `live, ${M.minuteMark(s)}` : 'live';
+    const lines = [];
+    if (M.str(s.comp).trim()) lines.push(M.str(s.comp).trim());
+    lines.push(`${M.fullOf(s.home)} ${s.score[0]}–${s.score[1]} ${M.fullOf(s.away)} (${status})`);
+    [0, 1].forEach((t) => {
+      const g = M.scorers(s, t);
+      if (g) lines.push(`${M.nameOf(t === 0 ? s.home : s.away)} goals: ${g}`);
+    });
+    const reds = [0, 1].map((t) => M.redList(s, t).map((r) => `${[r.name, r.minute].filter(Boolean).join(' ') || 'red card'} (${M.codeOf(t === 0 ? s.home : s.away)})`)).flat();
+    if (reds.length) lines.push(`Red cards: ${reds.join(', ')}`);
+    s.statsShown.forEach((k) => {
+      const def = M.STAT[k];
+      if (def && s.period !== 'pre') lines.push(`${def.label}: ${M.formatStat(def, s.stats[k][0])}–${M.formatStat(def, s.stats[k][1])}`);
+    });
+    const text = lines.join('\n');
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard')))
+      .then(() => Hub.toast('Result copied. Paste it into Discord or X.', { tone: 'good' }))
+      .catch(() => Hub.toast(text, { ms: 12000 }));
+  }
+
+  /* ---------- Extras: centre cards, shoot-out, autopilot, scenes, follow my team ---------- */
+  let lastKickTeam = -1;
+  const SNAP_KEYS = ['onAir', 'board', 'show', 'bug', 'card', 'scale'];
+  function extras(act, b) {
+    const v = b.dataset.val;
+    if (act === 'board') { live.board = live.board === v ? 'none' : v; commit({ keepPreview: true }); return; }
+    if (act === 'kick') {
+      const t = Number(b.dataset.team);
+      live.shoot[t] = live.shoot[t].concat(v === '1' ? 1 : 0);
+      lastKickTeam = t;
+      commit({ keepPreview: true });
+      return;
+    }
+    if (act === 'kick-undo') {
+      const t = lastKickTeam >= 0 && live.shoot[lastKickTeam].length ? lastKickTeam : live.shoot[1].length >= live.shoot[0].length ? 1 : 0;
+      live.shoot[t] = live.shoot[t].slice(0, -1);
+      lastKickTeam = -1;
+      commit({ keepPreview: true });
+      return;
+    }
+    if (act === 'kick-clear') { live.shoot = [[], []]; commit({ keepPreview: true }); return; }
+    if (act === 'auto') {
+      const k = b.dataset.key;
+      live.auto[k] = k === 'on' ? v === '1' : k === 'ftOff' ? Number(v) : v;
+      commit({ keepPreview: true });
+      return;
+    }
+    if (act === 'scene-apply') {
+      const sc = live.scenes.find((x) => x.id === b.closest('[data-id]').dataset.id);
+      if (!sc) return;
+      SNAP_KEYS.forEach((k) => { if (sc.snap[k] !== undefined) live[k] = k === 'show' ? Object.assign({}, live.show, sc.snap.show) : M.copy(sc.snap[k]); });
+      commit({ keepPreview: true });
+      Hub.toast(`Scene: ${sc.name}`);
+      return;
+    }
+    if (act === 'scene-del') { live.scenes = live.scenes.filter((x) => x.id !== b.closest('[data-id]').dataset.id); commit({ keepPreview: true }); return; }
+    if (act === 'follow-save' || act === 'follow-clear') {
+      const team = act === 'follow-clear' ? '' : document.getElementById('followTeam').value.trim();
+      const comps = Array.from(document.querySelectorAll('#followComps input:checked')).map((x) => x.value);
+      live.follow = { team, comps };
+      commit({ keepPreview: true });
+      Hub.toast(team ? `Following ${team}: the hub picks up their next match by itself.` : 'Follow my team is off.');
+    }
+  }
+  document.getElementById('sceneForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!live) return;
+    if (live.scenes.length >= 8) { Hub.toast('That’s 8 scenes, the most there can be. Delete one first.', { tone: 'bad' }); return; }
+    const name = document.getElementById('sceneName').value.trim() || `Scene ${live.scenes.length + 1}`;
+    const snap = {};
+    SNAP_KEYS.forEach((k) => { snap[k] = M.copy(live[k]); });
+    live.scenes = live.scenes.concat({ id: M.newId(), name, snap });
+    document.getElementById('sceneName').value = '';
+    commit({ keepPreview: true });
+  });
+  function syncExtras() {
+    document.querySelectorAll('[data-act="board"]').forEach((x) => x.setAttribute('aria-pressed', String(live.board === x.dataset.val)));
+    document.querySelectorAll('[data-act="auto"]').forEach((x) => {
+      const k = x.dataset.key;
+      const cur = k === 'on' ? (live.auto.on ? '1' : '0') : String(live.auto[k]);
+      x.setAttribute('aria-pressed', String(cur === x.dataset.val));
+    });
+    const dots = (list) => list.map((k) => `<i class="${k ? 'yes' : 'no'}"></i>`).join('') || '<small class="note">No kicks yet</small>';
+    document.getElementById('kickHome').innerHTML = dots(live.shoot[0]);
+    document.getElementById('kickAway').innerHTML = dots(live.shoot[1]);
+    document.getElementById('kickHomeName').textContent = M.codeOf(live.home);
+    document.getElementById('kickAwayName').textContent = M.codeOf(live.away);
+    const list = document.getElementById('sceneList');
+    const key = JSON.stringify(live.scenes.map((x) => [x.id, x.name]));
+    if (list._key !== key) {
+      list._key = key;
+      list.innerHTML = live.scenes.map((x) => `<div class="scene" data-id="${x.id}"><span></span><button class="btn btn-small" type="button" data-act="scene-apply">Use</button><button class="btn btn-quiet btn-small" type="button" data-act="scene-del" aria-label="Delete scene">×</button></div>`).join('') || '<p class="note">No scenes yet.</p>';
+      list.querySelectorAll('.scene').forEach((row, i) => { row.firstChild.textContent = live.scenes[i].name; });
+    }
+    const team = document.getElementById('followTeam');
+    if (document.activeElement !== team) team.value = live.follow.team;
+    const comps = document.getElementById('followComps');
+    if (!comps.children.length) comps.innerHTML = M.COMPETITIONS.map((c) => `<label><input type="checkbox" value="${c.key}">${c.name}</label>`).join('');
+    comps.querySelectorAll('input').forEach((x) => { if (document.activeElement !== x) x.checked = live.follow.comps.includes(x.value); });
+  }
+  // A pretend match in the preview, about a minute long, so anyone can see how a match day runs.
+  function practice() {
+    if (!live) return;
+    const base = M.copy(live);
+    Object.assign(base, { onAir: true, mode: 'manual', period: 'pre', score: [0, 0], goals: [], reds: [], yellows: [], anims: [], added: 0, board: 'info', kickoffAt: M.now() + 7000 });
+    base.show = Object.assign({}, base.show, { bug: true });
+    const steps = [
+      [0, (s) => s],
+      [7000, (s) => Object.assign(s, { board: 'none', period: '1h', clock: { base: 0, running: true, at: M.now() } })],
+      [16000, (s) => { s.score = [1, 0]; s.goals = [{ team: 0, scorer: 'Practice Player', minute: '12’', src: 'manual', key: '', at: M.now(), typed: true }]; s.anims = [{ id: `p${M.newId()}`, kind: 'goal', team: 0, name: 'Practice Player', minute: '12’', t: M.now() }]; return s; }],
+      [27000, (s) => { s.reds = [{ team: 1, player: 'Another Player', minute: '31’', src: 'manual', key: '', at: M.now() }]; s.anims = s.anims.concat({ id: `p${M.newId()}`, kind: 'red', team: 1, name: 'Another Player', minute: '31’', t: M.now() }); return s; }],
+      [35000, (s) => Object.assign(s, { period: 'ht', clock: { base: 2700, running: false, at: M.now() } })],
+      [45000, (s) => Object.assign(s, { period: '2h', clock: { base: 2700, running: true, at: M.now() } })],
+      [52000, (s) => { s.score = [1, 1]; s.goals = s.goals.concat({ team: 1, scorer: 'Late Equaliser', minute: '88’', src: 'manual', key: '', at: M.now(), typed: true }); s.anims = s.anims.concat({ id: `p${M.newId()}`, kind: 'goal', team: 1, name: 'Late Equaliser', minute: '88’', t: M.now() }); s.added = 4; return s; }],
+      [62000, (s) => Object.assign(s, { period: 'ft', clock: { base: 5400, running: false, at: M.now() } })],
+    ];
+    let state = base;
+    previewKey = 'practice';
+    steps.forEach(([at, fn]) => setTimeout(() => {
+      if (previewKey !== 'practice') return;
+      state = fn(M.copy(state));
+      previewState = state;
+      syncControls();
+      Hub.paintMonitor();
+    }, at));
+    setTimeout(() => { if (previewKey === 'practice') stopPreview(); }, 76000);
   }
 
   /* ---------- Tabs ---------- */
@@ -178,14 +335,14 @@
       text = 'Manual: the scoreboard only changes when you change it.';
       tone = 'idle';
     } else if (!f.fixtureId) {
-      text = 'ESPN live is on. Pick a match below and the scoreboard follows it.';
+      text = 'Live is on. Pick a match below and the scoreboard follows it.';
       tone = 'wait';
     } else if (f.error) {
       text = `Following ${f.title}, but the last update failed: ${f.error}`;
       tone = 'bad';
     } else {
       const when = f.updatedAt ? `updated ${ago(M.now() - f.updatedAt)} ago` : 'waiting for the first update';
-      text = `Following ${f.title} from ESPN, ${when}.`;
+      text = `Following ${f.title}, ${when}.${live.delay ? ` Showing ${live.delay} s behind for your stream delay.` : ''}`;
       tone = 'live';
     }
     setText(el.sourceText, text);
@@ -231,11 +388,14 @@
     return `${(((+input.value - min) / (max - min)) * 100).toFixed(1)}%`;
   }
   function paintSideReds(node, team) {
-    const list = live.reds.map((r, i) => ({ r, i })).filter((x) => x.r.team === team);
-    const key = list.map((x) => `${x.i}:${x.r.player}:${x.r.minute}`).join('|');
+    const all = live.reds.map((r, i) => ({ r, i })).filter((x) => x.r.team === team);
+    const key = all.map((x) => `${x.i}:${x.r.player}:${x.r.minute}`).join('|');
     if (node._key === key) return;
     node._key = key;
     node.replaceChildren();
+    node.classList.toggle('has-reds', all.length > 0);
+    // Past three cards, one card with a count; tapping it takes off the latest.
+    const list = all.length > 3 ? [all[all.length - 1]] : all;
     list.forEach(({ r, i }) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -243,12 +403,64 @@
       b.dataset.act = 'red-remove';
       b.dataset.index = String(i);
       const who = [r.player, r.minute].filter(Boolean).join(' ');
-      b.title = `Take off this red card${who ? ` (${who})` : ''}`;
+      b.title = all.length > 3 ? `${all.length} red cards. Tap to take off the latest${who ? ` (${who})` : ''}` : `Take off this red card${who ? ` (${who})` : ''}`;
       b.setAttribute('aria-label', b.title);
+      if (all.length > 3) { b.classList.add('has-count'); b.textContent = `×${all.length}`; }
       node.appendChild(b);
     });
   }
+
+  /* ---------- Team colours: ESPN's swatches, then any colour ---------- */
+  const SWATCH_LABEL = { kit: 'Kit this match', club: 'Club colour', alt: 'Second colour', trim: 'Kit trim' };
+  function paintSwatches(node, side) {
+    const team = live[side];
+    const key = JSON.stringify([team.swatches, team.color]);
+    if (node._key === key) return;
+    node._key = key;
+    node.replaceChildren();
+    team.swatches.forEach((w) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch';
+      b.dataset.act = 'swatch';
+      b.dataset.side = side;
+      b.dataset.c = w.c;
+      b.dataset.l = w.l;
+      b.style.setProperty('--c', w.c);
+      b.setAttribute('aria-pressed', String(w.c === team.color));
+      const dot = document.createElement('i');
+      const name = document.createElement('span');
+      name.textContent = SWATCH_LABEL[w.l];
+      b.append(dot, name);
+      node.appendChild(b);
+    });
+    node.hidden = !team.swatches.length;
+  }
+  function pickSwatch(side, colour, label) {
+    live[side].color = colour;
+    commit({ keepPreview: true });
+    // The kit swatch hands the colour back to Live; any other choice stays put.
+    if (live.feed.fixtureId) feedSettings({ kitColours: label === 'kit' });
+  }
+
+  /* ---------- Time zone for kick-off times ---------- */
+  const deviceZone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { return ''; } })();
+  function paintZones() {
+    const zones = [live.tz].concat(deviceZone && M.validZone(deviceZone) ? [deviceZone] : [], M.TIMEZONES).filter((z, i, a) => z && a.indexOf(z) === i);
+    const key = zones.join(',');
+    if (el.inTz._key !== key) {
+      el.inTz._key = key;
+      el.inTz.replaceChildren(...zones.map((z) => {
+        const o = document.createElement('option');
+        o.value = z;
+        o.textContent = z === deviceZone ? `${z.replace(/_/g, ' ')} (this device)` : z.replace(/_/g, ' ');
+        return o;
+      }));
+    }
+    setValue(el.inTz, live.tz);
+  }
   function syncControls() {
+    if (live) syncExtras();
     if (!live) return;
     el.chips.querySelectorAll('[data-sample]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.sample === previewKey)));
     document.querySelectorAll('[data-act="air"]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.val === '1') === live.onAir)));
@@ -266,8 +478,10 @@
     document.querySelectorAll('[data-act="nudge"], [data-act="set-clock"], [data-act="added"]').forEach((b) => { b.disabled = !play; });
     el.inClock.disabled = !play;
     setText(el.addedOut, `+${live.added}`);
-    el.offsetNote.hidden = !following() || !live.clockOffset;
-    setText(el.offsetNote, `Live clock moved ${live.clockOffset > 0 ? '+' : '−'}${Math.abs(live.clockOffset)} s to match the TV. The nudge buttons change this.`);
+    // In Live, the match runs itself: the manual controls step aside and the stream delay takes their place.
+    el.controls.classList.toggle('is-live-mode', live.mode === 'live');
+    setText(el.delayOut, live.delay ? `${live.delay} s` : 'None');
+    el.delayReset.disabled = !live.delay;
     tickReadout();
 
     setText(el.scHomeName, M.nameOf(live.home));
@@ -284,6 +498,7 @@
     document.querySelectorAll('[data-act="red"]').forEach((b) => b.setAttribute('aria-label', `Red card for ${teamName(+b.dataset.team)}`));
     paintSideReds(el.sideRedsHome, 0);
     paintSideReds(el.sideRedsAway, 1);
+    el.sideRedsHome.closest('.score-band').classList.toggle('any-reds', live.reds.length > 0);
     el.replayBtn.disabled = !live.goals.length;
     SB.paintBadge(el.deckHomeBadge, live.home, 'home');
     SB.paintBadge(el.deckAwayBadge, live.away, 'away');
@@ -296,7 +511,7 @@
     setText(el.scaleOut, `${Math.round(live.scale * 100)}%`);
     document.querySelectorAll('[data-act="show"]').forEach((b) => {
       const key = b.dataset.key;
-      const val = key === 'card' ? b.dataset.val : b.dataset.val === '1';
+      const val = ['card', 'scorers', 'names', 'style'].includes(key) ? b.dataset.val : b.dataset.val === '1';
       b.setAttribute('aria-pressed', String(live.show[key] === val));
     });
     setValue(el.inBugSize, String(Math.round(live.bug.s * 100)));
@@ -310,10 +525,18 @@
     setValue(el.inHomeCode, live.home.code);
     setValue(el.inHomeColor, live.home.color);
     setValue(el.inAwayName, live.away.name);
+    setValue(el.inHomeFull, live.home.full);
+    setValue(el.inAwayFull, live.away.full);
     setValue(el.inAwayCode, live.away.code);
     setValue(el.inAwayColor, live.away.color);
     setValue(el.inComp, live.comp);
     setValue(el.inKickoff, live.kickoff);
+    paintZones();
+    paintSwatches(el.swHome, 'home');
+    paintSwatches(el.swAway, 'away');
+    document.querySelectorAll('[data-act="accent"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.val === live.look.accent)));
+    setValue(el.inBrand, live.look.brand);
+    document.querySelectorAll('[data-act="look"]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.val === '1') === !!live.look[b.dataset.key])));
     SB.paintBadge(el.prevHome, live.home, 'home');
     SB.paintBadge(el.prevAway, live.away, 'away');
     el.clearHome.disabled = !live.home.crestV;
@@ -366,7 +589,7 @@
   }
   async function loadFixtures(force, quiet) {
     if (!live || blocked()) return;
-    const key = `${feedComp || 'pl'}|${feedDay}`;
+    const key = `${feedComp || 'pl'}|${feedDay}|${live.tz}`;
     if (!force && key === fixturesKey && (fixtures || fixturesError || loading)) return;
     if (loading && quiet) return;
     fixturesKey = key;
@@ -374,7 +597,7 @@
     loading = !quiet;
     paintFixtures();
     try {
-      const data = await Hub.call('GET', `/api/football/matches?comp=${encodeURIComponent(feedComp || 'pl')}&date=${encodeURIComponent(feedDay)}`);
+      const data = await Hub.call('GET', `/api/football/matches?comp=${encodeURIComponent(feedComp || 'pl')}&date=${encodeURIComponent(feedDay)}&tz=${encodeURIComponent(live.tz)}`);
       if (fixturesKey === key) { fixtures = data.matches || []; fixturesError = ''; }
     } catch (e) {
       if (fixturesKey === key && !quiet) fixturesError = e.message;
@@ -469,7 +692,7 @@
     localFeedError('');
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
     try {
-      await Hub.call('POST', '/api/football/follow', { eventId: id, comp: feedComp || 'pl' });
+      await Hub.call('POST', '/api/football/follow', { streamer: Hub.streamer.id, eventId: id, comp: feedComp || 'pl' });
       Hub.toast('Following the match. The scoreboard updates by itself now.', { tone: 'good' });
       fixturesKey = '';
       loadFixtures(true, true);
@@ -479,7 +702,7 @@
     }
   }
   async function feedSettings(body) {
-    try { await Hub.call('POST', '/api/football/settings', body); } catch (e) { localFeedError(e.message); }
+    try { await Hub.call('POST', '/api/football/settings', Object.assign({ streamer: Hub.streamer.id }, body)); } catch (e) { localFeedError(e.message); }
   }
   // While the Match tab is open, the list keeps itself up to date.
   setInterval(() => {
@@ -586,7 +809,7 @@
       live.goals = [];
       live.reds = [];
       live.anims = [];
-      live.clockOffset = 0;
+
       commit();
     });
   }
@@ -629,7 +852,6 @@
     el.inClock.removeAttribute('aria-invalid');
     setText(el.clockHint, '');
     undoable('Clock set.', () => {
-      if (following()) live.clockOffset = M.clamp(Math.round(live.clockOffset + (v - M.elapsed(live))), -600, 600);
       M.setClock(live, v, live.clock.running);
       el.inClock.value = '';
       commit();
@@ -637,8 +859,11 @@
   }
   function nudge(d) {
     M.setClock(live, M.elapsed(live) + d, live.clock.running);
-    if (following()) live.clockOffset = M.clamp(live.clockOffset + d, -600, 600);
     commit();
+  }
+  function setDelay(v) {
+    live.delay = M.clamp(Math.round(v), 0, 300);
+    commit({ keepPreview: true });
   }
   function toggleClock() {
     if (!M.inPlay(live)) return;
@@ -651,7 +876,19 @@
     el.inScorer.value = '';
     return name;
   }
-  function goal(team) {
+  function goal(team, sure) {
+    const recent = live.goals.filter((g) => g.team === team && M.now() - (g.at || 0) < 10000);
+    if (recent.length && !sure) {
+      const ago = Math.max(1, Math.round((M.now() - recent[recent.length - 1].at) / 1000));
+      Hub.toast(`A goal for ${teamName(team)} went in ${ago} s ago. Add another?`, { action: { label: 'Add goal', fn: () => goal(team, true) }, ms: 8000 });
+      return;
+    }
+    document.querySelectorAll(`[data-act="goal"][data-team="${team}"]`).forEach((btn) => {
+      btn.classList.remove('is-fired');
+      void btn.offsetWidth;
+      btn.classList.add('is-fired');
+      setTimeout(() => btn.classList.remove('is-fired'), 650);
+    });
     const scorer = takePlayer();
     const minute = minuteNow();
     undoable(`Goal for ${teamName(team)}${scorer ? ` (${scorer})` : ''}.`, () => {
@@ -747,7 +984,7 @@
   /* ---------- Keyboard (only on this page, and never while typing) ---------- */
   function onKey(k) {
     if (!live) return false;
-    if (k === ' ') { toggleClock(); return true; }
+    if (k === ' ') { if (live.mode === 'manual') toggleClock(); return true; } // in Live the match runs the clock
     if (k === 'h' || k === 'H') { goal(0); return true; }
     if (k === 'a' || k === 'A') { goal(1); return true; }
     if (k === 'o' || k === 'O') { Hub.setOnAir('scoreboard', !live.onAir); return true; }
@@ -783,7 +1020,7 @@
     label.classList.add('is-busy');
     try {
       const dataUrl = await toPng(file);
-      await Hub.call('POST', `/api/crest/${side}`, { dataUrl });
+      await Hub.call('POST', `/api/crest/${Hub.streamer.id}/${side}`, { dataUrl });
     } catch (e) {
       setText(err, e && e.message === 'unreadable' ? 'That image couldn’t be read. Try saving it as a PNG first.' : e.message);
     }
@@ -791,7 +1028,7 @@
   }
   async function removeCrest(side) {
     const err = side === 'home' ? el.crestErrHome : el.crestErrAway;
-    try { await Hub.call('DELETE', `/api/crest/${side}`); setText(err, ''); } catch (e) { setText(err, e.message); }
+    try { await Hub.call('DELETE', `/api/crest/${Hub.streamer.id}/${side}`); setText(err, ''); } catch (e) { setText(err, e.message); }
   }
 
   /* ---------- Events ---------- */
@@ -801,6 +1038,10 @@
     const act = b.dataset.act;
     if (act === 'sample') { startPreview(b.dataset.sample); return; }
     if (act === 'sample-off') { stopPreview(); return; }
+    if (act === 'test-anims') { testAnimations(); return; }
+    if (act === 'practice') { practice(); return; }
+    if (['board', 'kick', 'kick-undo', 'kick-clear', 'auto', 'scene-apply', 'scene-del', 'follow-save', 'follow-clear'].includes(act) && live) { extras(act, b); return; }
+    if (act === 'copy-result') { if (live) copyResult(); return; }
     if (act === 'tab') { setTab(b.dataset.tab); return; }
     if (!live || blocked()) return;
     const team = Number(b.dataset.team);
@@ -811,7 +1052,7 @@
         if (live.mode === b.dataset.val) break;
         live.mode = b.dataset.val === 'live' ? 'live' : 'manual';
         commit({ keepPreview: true });
-        Hub.toast(live.mode === 'live' ? 'ESPN live: the scoreboard follows the match by itself.' : 'Manual: nothing changes unless you change it.');
+        Hub.toast(live.mode === 'live' ? 'Live: the scoreboard follows the match by itself.' : 'Manual: nothing changes unless you change it.');
         break;
       case 'period': jumpPeriod(b.dataset.period); break;
       case 'advance': advance(); break;
@@ -826,8 +1067,13 @@
       case 'replay': replayGoal(); break;
       case 'stat': stepStat(b.dataset.key, team, d); break;
       case 'stat-toggle': toggleStat(b.dataset.key); break;
+      case 'delay': setDelay(live.delay + d); break;
+      case 'delay-reset': setDelay(0); break;
+      case 'swatch': pickSwatch(b.dataset.side, b.dataset.c, b.dataset.l); break;
+      case 'accent': live.look.accent = b.dataset.val === 'brand' ? 'brand' : 'comp'; commit({ keepPreview: true }); break;
+      case 'look': live.look[b.dataset.key] = b.dataset.val === '1'; commit({ keepPreview: true }); break;
       case 'show':
-        if (b.dataset.key === 'card') live.show.card = b.dataset.val;
+        if (['card', 'scorers', 'names', 'style'].includes(b.dataset.key)) live.show[b.dataset.key] = b.dataset.val;
         else live.show[b.dataset.key] = b.dataset.val === '1';
         commit({ keepPreview: true });
         break;
@@ -846,11 +1092,11 @@
       case 'day': feedDay = shiftDay(Number(b.dataset.shift)); syncFeed(); loadFixtures(false); break;
       case 'feed-link': linkFixture(b.dataset.id, b); break;
       case 'feed-unlink':
-        Hub.call('POST', '/api/football/unfollow')
+        Hub.call('POST', '/api/football/unfollow', { streamer: Hub.streamer.id })
           .then(() => { Hub.toast('Stopped following. The scoreboard is in Manual now.'); fixturesKey = ''; loadFixtures(true, true); })
           .catch((err) => localFeedError(err.message));
         break;
-      case 'feed-refresh': Hub.call('POST', '/api/football/refresh').catch((err) => localFeedError(err.message)); break;
+      case 'feed-refresh': Hub.call('POST', '/api/football/refresh', { streamer: Hub.streamer.id }).catch((err) => localFeedError(err.message)); break;
       case 'poll': feedSettings({ pollSeconds: Number(b.dataset.secs) }); break;
       default: break;
     }
@@ -873,6 +1119,8 @@
   const look = { keepPreview: true };
   onInput(el.inHomeName, (v) => { live.home.name = v.slice(0, 40); }, look);
   onInput(el.inAwayName, (v) => { live.away.name = v.slice(0, 40); }, look);
+  onInput(el.inHomeFull, (v) => { live.home.full = v.slice(0, 48); }, look);
+  onInput(el.inAwayFull, (v) => { live.away.full = v.slice(0, 48); }, look);
   onInput(el.inHomeCode, (v) => { live.home.code = v.replace(/[^\p{L}\p{N}]/gu, '').toUpperCase().slice(0, 4); }, look);
   onInput(el.inAwayCode, (v) => { live.away.code = v.replace(/[^\p{L}\p{N}]/gu, '').toUpperCase().slice(0, 4); }, look);
   const colourInput = (side) => (v) => {
@@ -892,6 +1140,14 @@
   onInput(el.inScale, (v) => { live.scale = M.clamp(+v / 100, 0.5, 1.6); keepInside('bug'); keepInside('card'); }, look);
   onInput(el.inBugSize, (v) => { live.bug.s = M.clamp(+v / 100, 0.6, 1.5); keepInside('bug'); }, look);
   onInput(el.inCardSize, (v) => { live.card.s = M.clamp(+v / 100, 0.6, 1.3); keepInside('card'); }, look);
+  el.inTz.addEventListener('change', () => {
+    if (!live || blocked() || !M.validZone(el.inTz.value)) return;
+    live.tz = el.inTz.value;
+    commit({ keepPreview: true });
+    fixturesKey = '';
+    loadFixtures(true);
+  });
+  onInput(el.inBrand, (v) => { if (M.isHex(v)) { live.look.brand = v.toLowerCase(); live.look.accent = 'brand'; } }, look);
   el.periodMore.addEventListener('change', () => {
     const v = el.periodMore.value;
     el.periodMore.value = '';
