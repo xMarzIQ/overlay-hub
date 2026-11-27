@@ -15,7 +15,7 @@
   };
   const PERIOD_NAMES = { pre: 'Pre-match', '1h': '1st half', ht: 'Half-time', '2h': '2nd half', brk: 'Break', et1: 'Extra time, 1st half', et2: 'Extra time, 2nd half', pens: 'Penalties', ft: 'Full-time' };
   const PATCHABLE = ['mode', 'onAir', 'scale', 'delay', 'tz', 'look', 'comp', 'compLogo', 'kickoff', 'kickoffAt', 'home', 'away', 'period', 'note', 'clock',
-    'added', 'score', 'pens', 'stats', 'statsShown', 'goals', 'reds', 'yellows', 'anims', 'show', 'bug', 'card', 'writer', 'rev', 'shoot', 'board', 'follow', 'auto', 'scenes'];
+    'added', 'score', 'pens', 'stats', 'statsShown', 'goals', 'reds', 'yellows', 'anims', 'show', 'bug', 'card', 'writer', 'rev', 'shoot', 'board', 'follow', 'auto', 'scenes', 'preview'];
   const TABS = ['match', 'stats', 'teams', 'layout'];
 
   const el = {};
@@ -220,6 +220,11 @@
     commit({ keepPreview: true });
   });
   function syncExtras() {
+    const pops = ['banners', 'spotlight', 'splash', 'subs'].every((k) => live.show[k]);
+    document.querySelectorAll('[data-act="popups"]').forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.val === '1') === pops)));
+    document.querySelectorAll('[data-act="card-now"]').forEach((x) => x.setAttribute('aria-pressed', String(live.show.card === 'show')));
+    const pens = document.querySelector('[data-fold="sb-pens"]');
+    if (pens) pens.hidden = !(live.period === 'pens' || (live.period === 'ft' && live.note === 'pens'));
     document.querySelectorAll('[data-act="board"]').forEach((x) => x.setAttribute('aria-pressed', String(live.board === x.dataset.val)));
     document.querySelectorAll('[data-act="auto"]').forEach((x) => {
       const k = x.dataset.key;
@@ -332,10 +337,10 @@
     let text;
     let tone;
     if (live.mode === 'manual') {
-      text = 'Manual: the scoreboard only changes when you change it.';
+      text = 'By hand: nothing changes unless you press something.';
       tone = 'idle';
     } else if (!f.fixtureId) {
-      text = 'Live is on. Pick a match below and the scoreboard follows it.';
+      text = 'Auto is on. Open Find a match, pick a game, and it runs itself.';
       tone = 'wait';
     } else if (f.error) {
       text = `Following ${f.title}, but the last update failed: ${f.error}`;
@@ -368,7 +373,7 @@
       else {
         const gap = f.nextAt && f.updatedAt ? (f.nextAt - f.updatedAt) / 1000 : 0;
         if (gap > f.pollSeconds + 1) parts.push(`Next check in ${ago(Math.max(0, f.nextAt - M.now()))}.`);
-        else parts.push(`Checking ESPN every ${f.pollSeconds} s.`);
+        else parts.push(`Checking every ${f.pollSeconds} s.`);
         if (f.updatedAt) parts.push(`Last update ${ago(M.now() - f.updatedAt)} ago.`);
       }
       meta = parts.join(' ');
@@ -463,7 +468,10 @@
     if (live) syncExtras();
     if (!live) return;
     el.chips.querySelectorAll('[data-sample]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.sample === previewKey)));
-    document.querySelectorAll('[data-act="air"]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.val === '1') === live.onAir)));
+    // Off, Show preview, then Show on screen
+    const sbVis = document.getElementById('sbVis');
+    const v = live.onAir ? 'live' : live.preview ? 'preview' : 'off';
+    if (sbVis._v !== v) { sbVis._v = v; sbVis.innerHTML = Hub.visButtons(v); }
     document.querySelectorAll('[data-act="mode"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.val === live.mode)));
     document.querySelectorAll('[data-act="period"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.period === live.period)));
     el.periodMore.value = '';
@@ -584,7 +592,7 @@
     el.kitToggle.checked = f.kitColours;
     el.crestToggle.checked = f.crests;
     setText(el.feedError, following() && f.error ? f.error : el.feedError.dataset.local || '');
-    setText(el.teamsNote, f.fixtureId ? 'Filled in from ESPN. Your changes here stay.' : 'Following a match fills these in');
+    setText(el.teamsNote, f.fixtureId ? 'Filled in by Live. Your changes here stay.' : 'Following a match fills these in');
     paintFixtures();
   }
   async function loadFixtures(force, quiet) {
@@ -1033,6 +1041,15 @@
 
   /* ---------- Events ---------- */
   document.addEventListener('click', (e) => {
+    const vb = e.target.closest('#sbVis [data-vis]');
+    if (vb && live) {
+      const to = vb.dataset.vis;
+      live.onAir = to === 'live';
+      live.preview = to !== 'off';
+      commit({ keepPreview: true });
+      Hub.toast(to === 'live' ? 'Scoreboard is on screen' : to === 'preview' ? 'Scoreboard in preview: only you can see it' : 'Scoreboard is off', { tone: to === 'live' ? 'goal' : 'info' });
+      return;
+    }
     const b = e.target.closest('[data-act]');
     if (!b || b.disabled) return;
     const act = b.dataset.act;
@@ -1041,6 +1058,8 @@
     if (act === 'test-anims') { testAnimations(); return; }
     if (act === 'practice') { practice(); return; }
     if (['board', 'kick', 'kick-undo', 'kick-clear', 'auto', 'scene-apply', 'scene-del', 'follow-save', 'follow-clear'].includes(act) && live) { extras(act, b); return; }
+    if (act === 'popups' && live) { ['banners', 'spotlight', 'splash', 'subs'].forEach((k) => { live.show[k] = b.dataset.val === '1'; }); commit({ keepPreview: true }); return; }
+    if (act === 'card-now' && live) { live.show.card = live.show.card === 'show' ? 'auto' : 'show'; live.board = 'none'; commit({ keepPreview: true }); return; }
     if (act === 'copy-result') { if (live) copyResult(); return; }
     if (act === 'tab') { setTab(b.dataset.tab); return; }
     if (!live || blocked()) return;
@@ -1052,7 +1071,7 @@
         if (live.mode === b.dataset.val) break;
         live.mode = b.dataset.val === 'live' ? 'live' : 'manual';
         commit({ keepPreview: true });
-        Hub.toast(live.mode === 'live' ? 'Live: the scoreboard follows the match by itself.' : 'Manual: nothing changes unless you change it.');
+        Hub.toast(live.mode === 'live' ? 'Auto: the scoreboard follows the match by itself.' : 'By hand: nothing changes unless you press something.');
         break;
       case 'period': jumpPeriod(b.dataset.period); break;
       case 'advance': advance(); break;

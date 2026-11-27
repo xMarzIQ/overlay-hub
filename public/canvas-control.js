@@ -20,13 +20,15 @@
   let playlistMB = 0;
 
   const ctl = Hub.module('canvas', {
-    patchable: ['onAir', 'items', 'strokes', 'spot', 'music', 'boards'],
+    patchable: ['items', 'strokes', 'ink', 'spot', 'music', 'boards'],
     onState(s) { live = s; sync(); },
-    isShowing: (s) => s.onAir && (s.items.some((i) => i.shown) || s.strokes.length > 0 || s.spot.on || s.music.playing),
+    isShowing: (s) => s.items.some((i) => i.vis === 'live') || (s.ink === 'live' && s.strokes.length > 0) || s.spot.on || s.music.playing,
+    liveCount: (s) => s.items.filter((i) => i.vis === 'live').length + (s.ink === 'live' && s.strokes.length ? 1 : 0),
     tileSummary(s) {
-      const shown = s.items.filter((i) => i.shown).length;
-      return { text: shown || s.strokes.length ? `${shown} item${shown === 1 ? '' : 's'} showing` : 'Nothing on the canvas', small: s.music.playing ? 'Music playing' : s.strokes.length ? `${s.strokes.length} drawn` : '' };
+      const on = s.items.filter((i) => i.vis === 'live').length;
+      return { text: on ? `${on} on screen` : 'Nothing on screen', small: s.music.playing ? 'Music playing' : s.ink === 'live' && s.strokes.length ? 'Drawing on screen' : '' };
     },
+    onDrag(id, x, y) { const it = live && live.items.find((i) => i.id === id); if (it) { it.x = x; it.y = y; commit(); } },
   });
   const commit = () => ctl.commit();
 
@@ -94,32 +96,32 @@
     if (type === 'text' && !text) { Hub.toast('Type the text first.', { tone: 'bad' }); return; }
     const url = /^https?:\/\//i.test(text) ? text : `https://${text}`;
     // New things start hidden: place them in the preview first, then press Show
-    const it = X.canvasItem({ type, shown: false, pos: type === 'qr' ? 'br' : 'mc', size: type === 'qr' ? 's' : 'm', z: live.items.length + 1, src: type === 'text' ? '' : type === 'qr' ? text : url, text: type === 'text' ? text : '' });
+    const it = X.canvasItem({ type, vis: 'preview', x: type === 'qr' ? 1700 : 960, y: type === 'qr' ? 880 : 540, scale: 1, z: live.items.length + 1, src: type === 'text' ? '' : type === 'qr' ? text : url, text: type === 'text' ? text : '' });
     live.items = live.items.concat(it);
     $('cvText').value = '';
     commit();
   }
   function addImage(id) {
-    live.items = live.items.concat(X.canvasItem({ type: 'image', shown: false, src: id, pos: 'mc', size: 'm', z: live.items.length + 1 }));
+    live.items = live.items.concat(X.canvasItem({ type: 'image', vis: 'preview', src: id, x: 960, y: 540, scale: 1, z: live.items.length + 1 }));
     commit();
   }
 
   /* ---------- Painting the page ---------- */
   function sync() {
     if (!live) return;
-    document.querySelectorAll('[data-cv="air"]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.val === '1') === live.onAir)));
+    const ink = document.getElementById('cvInk');
+    if (ink._v !== live.ink) { ink._v = live.ink; ink.innerHTML = `<span class="cv-ink-name">Your drawing</span>${Hub.visButtons(live.ink)}`; }
     document.querySelector('[data-cv="fade"]').setAttribute('aria-pressed', String(fade));
     document.querySelector('[data-cv="music"][data-val="loop"]').setAttribute('aria-pressed', String(live.music.loop));
     if (document.activeElement !== $('cvVol')) $('cvVol').value = String(live.music.vol);
     const rows = live.items.map((it) => {
       const label = it.type === 'image' ? ((media.find((m) => m.id === it.src) || {}).name || 'Picture') : it.type === 'text' ? it.text : it.type === 'pitch' ? '' : it.src;
       const left = it.until ? Math.max(0, Math.round((it.until - Date.now()) / 1000)) : 0;
-      return `<div class="cv-row is-item" data-id="${it.id}"><span class="cv-name">${NAMES[it.type]}<small>${esc(label)}${left ? `, hides in ${left} s` : ''}</small></span><span class="cv-ctl">
-        <button class="btn btn-small" type="button" data-cv="item-show" aria-pressed="${it.shown}">${it.shown ? 'Showing' : 'Show'}</button>
-        <select class="select" data-cv="item-pos" aria-label="Place">${Object.entries(POS_NAMES).map(([k, v]) => `<option value="${k}"${k === it.pos ? ' selected' : ''}>${v}</option>`).join('')}</select>
-        <select class="select" data-cv="item-size" aria-label="Size">${['s', 'm', 'l', 'xl'].map((k) => `<option value="${k}"${k === it.size ? ' selected' : ''}>${k.toUpperCase()}</option>`).join('')}</select>
-        <select class="select" data-cv="item-timer" aria-label="Hide after"><option value="0">No timer</option><option value="10">10 s</option><option value="30">30 s</option><option value="60">1 min</option><option value="300">5 min</option></select>
-        <button class="btn btn-quiet btn-small" type="button" data-cv="item-up" aria-label="Bring forward">↑</button>
+      return `<div class="cv-row is-item" data-id="${it.id}"><span class="cv-name">${NAMES[it.type]}<small>${esc(label)}${left ? `, turns off in ${left} s` : ''}</small></span>
+        ${Hub.visButtons(it.vis)}
+        <span class="cv-ctl">${it.type === 'text' ? `<label class="dk-inline">Colour <input type="color" data-cv="item-color" value="${it.color}" aria-label="Text colour"></label>` : ''}<label class="dk-inline dk-size">Size <input type="range" min="20" max="300" step="5" data-cv="item-scale" value="${Math.round(it.scale * 100)}"></label>
+        <select class="select" data-cv="item-timer" aria-label="Turn off after"><option value="0">No timer</option><option value="10">Off after 10 s</option><option value="30">Off after 30 s</option><option value="60">Off after 1 min</option><option value="300">Off after 5 min</option></select>
+        <button class="btn btn-quiet btn-small" type="button" data-cv="item-up" aria-label="Bring to the front">↑</button>
         <button class="btn btn-quiet btn-small" type="button" data-cv="item-del" aria-label="Remove">×</button></span></div>`;
     }).join('');
     const box = $('cvItems');
@@ -141,29 +143,38 @@
     if (document.activeElement !== $('cvLimit')) $('cvLimit').value = String(playlistMB || '');
   }
   window.addEventListener('hub-media', (e) => { media = e.detail.list; playlistMB = e.detail.playlistMB; paintLibrary(); });
-  $('cvColours').innerHTML = COLOURS.map((c) => `<button type="button" data-cv="colour" data-val="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${c === colour}"></button>`).join('');
+  $('cvColours').innerHTML = '<button type="button" data-cv="colour" data-val="brand" style="background:var(--brand)" aria-label="Brand colour" title="Brand colour"></button>' + COLOURS.map((c) => `<button type="button" data-cv="colour" data-val="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${c === colour}"></button>`).join('')
+    + '<input type="color" id="cvCustom" value="#ff3b5c" aria-label="Any colour">';
+  // Any colour for the pen
+  $('cvCustom').addEventListener('input', (e) => { colour = e.target.value; document.querySelectorAll('[data-cv="colour"]').forEach((x) => x.setAttribute('aria-pressed', 'false')); });
 
   /* ---------- Clicks and changes ---------- */
   document.getElementById('viewCanvas').addEventListener('click', (e) => {
+    const vb = e.target.closest('[data-vis]');
+    if (vb && live) {
+      const row = vb.closest('[data-id]');
+      if (vb.closest('#cvInk')) live.ink = vb.dataset.vis;
+      else if (row) { const it = live.items.find((x) => x.id === row.dataset.id); if (it) { it.vis = vb.dataset.vis; if (it.vis !== 'off' && it.until && it.until < Date.now()) it.until = 0; } }
+      commit();
+      return;
+    }
     const b = e.target.closest('[data-cv]');
     if (!b || !live || b.tagName === 'SELECT') return;
     const v = b.dataset.val;
     const row = b.closest('[data-id]');
     const item = row && live.items.find((x) => x.id === row.dataset.id);
     switch (b.dataset.cv) {
-      case 'air': live.onAir = v === '1'; commit(); break;
       case 'tool': setTool(v); break;
-      case 'colour': colour = v; document.querySelectorAll('[data-cv="colour"]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.val === v))); break;
+      case 'colour': colour = v === 'brand' ? ((Hub.streamer.look || {}).brand || '#e11d48') : v; document.querySelectorAll('[data-cv="colour"]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.val === v))); break;
       case 'fade': fade = !fade; sync(); break;
       case 'undo': live.strokes = live.strokes.slice(0, -1); commit(); break;
-      case 'clear': live.strokes = []; commit(); break;
+      case 'clear': { const done = Hub.remember('canvas', 'Drawing cleared.'); live.strokes = []; commit(); done(); break; }
       case 'spot-off': live.spot = Object.assign({}, live.spot, { on: false }); commit(); break;
       case 'add': add(b.dataset.type); break;
-      case 'item-show': if (item) { item.shown = !item.shown; if (item.shown && item.until && item.until < Date.now()) item.until = 0; commit(); } break;
       case 'item-up': if (item) { item.z = Math.max(...live.items.map((x) => x.z)) + 1; commit(); } break;
-      case 'item-del': if (item) { live.items = live.items.filter((x) => x !== item); commit(); } break;
+      case 'item-del': if (item) { const done = Hub.remember('canvas', `${NAMES[item.type]} removed.`); live.items = live.items.filter((x) => x !== item); commit(); done(); } break;
       case 'board-load': { const bd = live.boards.find((x) => x.id === row.dataset.id); if (bd) { live.items = bd.items.map((x) => Object.assign({}, x)); live.strokes = bd.strokes.map((x) => Object.assign({}, x)); commit(); Hub.toast(`Loaded ${bd.name}`); } break; }
-      case 'board-del': live.boards = live.boards.filter((x) => x.id !== row.dataset.id); commit(); break;
+      case 'board-del': { const done = Hub.remember('canvas', 'Board deleted.'); live.boards = live.boards.filter((x) => x.id !== row.dataset.id); commit(); done(); break; }
       case 'lib-add': addImage(row.dataset.id); break;
       case 'lib-play': live.music = Object.assign({}, live.music, { id: row.dataset.id, playing: true, at: Date.now() }); commit(); break;
       case 'lib-pin': { const m = media.find((x) => x.id === row.dataset.id); if (m) Hub.call('PATCH', `/api/media/${m.id}`, { pinned: !m.pinned }).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break; }
@@ -188,9 +199,9 @@
     if (!live) return;
     const row = t.closest('[data-id]');
     const item = row && live.items.find((x) => x.id === row.dataset.id);
-    if (t.dataset.cv === 'item-pos' && item) { item.pos = t.value; commit(); }
-    if (t.dataset.cv === 'item-size' && item) { item.size = t.value; commit(); }
-    if (t.dataset.cv === 'item-timer' && item) { item.until = Number(t.value) ? Date.now() + Number(t.value) * 1000 : 0; item.shown = true; commit(); }
+    if (t.dataset.cv === 'item-scale' && item) { item.scale = Number(t.value) / 100; commit(); }
+    if (t.dataset.cv === 'item-color' && item) { item.color = t.value; commit(); }
+    if (t.dataset.cv === 'item-timer' && item) { item.until = Number(t.value) ? Date.now() + Number(t.value) * 1000 : 0; commit(); }
     if (t.id === 'cvVol') { live.music = Object.assign({}, live.music, { vol: Number(t.value) }); commit(); }
     if (t.id === 'cvLimit') Hub.call('POST', `/api/streamers/${Hub.streamer.id}/playlist`, { mb: Number(t.value) }).catch((err) => Hub.toast(err.message, { tone: 'bad' }));
     if (t.id === 'cvFile' && t.files && t.files[0]) upload(t.files[0]).finally(() => { t.value = ''; });

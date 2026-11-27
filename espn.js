@@ -53,14 +53,14 @@ async function fetchJson(path, timeoutMs) {
   try {
     res = await fetch(`${BASE}${path}`, { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (overlay hub)' }, signal: ctrl.signal });
   } catch (e) {
-    throw new Error('Couldn’t reach ESPN. Check the server’s internet connection.');
+    throw new Error('Couldn’t get live scores. Check the server’s internet connection.');
   } finally {
     clearTimeout(timer);
   }
-  if (res.status === 404) throw httpError(404, 'ESPN doesn’t have that match.');
-  if (res.status === 429 || res.status === 403) throw httpError(res.status, 'ESPN asked for fewer requests, so checks are slower for a minute.');
-  if (!res.ok) throw new Error(`ESPN answered with an error (${res.status}). It usually clears up on its own.`);
-  try { return await res.json(); } catch (e) { throw new Error('ESPN sent something unreadable.'); }
+  if (res.status === 404) throw httpError(404, 'That match isn’t available.');
+  if (res.status === 429 || res.status === 403) throw httpError(res.status, 'Live scores asked for fewer requests, so checks are slower for a minute.');
+  if (!res.ok) throw new Error(`Live scores answered with an error (${res.status}). It usually clears up on its own.`);
+  try { return await res.json(); } catch (e) { throw new Error('Live scores sent something unreadable.'); }
 }
 function sharedGet(path, timeoutMs, maxAgeMs) {
   const hit = recent.get(path);
@@ -108,7 +108,8 @@ function createEspn(ctx) {
     const side = (homeAway) => {
       const c = (comp.competitors || []).find((x) => x.homeAway === homeAway) || {};
       const t = c.team || {};
-      return { name: t.shortDisplayName || t.displayName || t.name || '', code: t.abbreviation || '', logo: t.logo || '', score: c.score == null ? null : num(c.score) };
+      const known = Match.knownTeam(t.displayName, t.shortDisplayName || t.name, t.abbreviation);
+      return { name: known.name, code: known.code, logo: t.logo || '', score: c.score == null ? null : num(c.score) };
     };
     return {
       id: String(e.id),
@@ -208,7 +209,7 @@ function createEspn(ctx) {
     if (!comp) throw httpError(400, 'Pick a competition first.');
     if (!/^\d+$/.test(String(eventId))) throw httpError(400, 'Pick a match first.');
     const event = await get(`/${comp.slug}/scoreboard/${eventId}`, 8000);
-    if (!event || !event.competitions) throw httpError(404, 'ESPN doesn’t have that match.');
+    if (!event || !event.competitions) throw httpError(404, 'That match isn’t available.');
     const { home, away } = sides(event);
     const wantCrests = true; // a new match always starts with ESPN's crests
     const [crestH, crestA, sum] = await Promise.all([
@@ -244,14 +245,14 @@ function createEspn(ctx) {
     ['home', 'away'].forEach((side) => {
       const t = (side === 'home' ? home : away).team || {};
       s[side] = {
-        name: String(t.shortDisplayName || t.displayName || t.name || (side === 'home' ? 'Home' : 'Away')).slice(0, 40),
+        name: String(Match.knownTeam(t.displayName, t.shortDisplayName || t.name).name || (side === 'home' ? 'Home' : 'Away')).slice(0, 40),
         full: String(t.displayName || t.shortDisplayName || t.name || '').slice(0, 48),
         code: '',
         color: hex(t.color) || fresh[side].color,
         crestV: 0,
         swatches: swatchesFor(t, null),
       };
-      s[side].code = String(t.abbreviation || '').toUpperCase().slice(0, 4) || Match.codeOf({ name: s[side].name });
+      s[side].code = Match.knownTeam(t.displayName, t.shortDisplayName, t.abbreviation).code.slice(0, 4) || Match.codeOf({ name: s[side].name });
     });
     s.kickoff = kickoffLabel(event.date, s.tz) || s.kickoff;
     s.kickoffAt = Date.parse(event.date) || 0;
@@ -294,7 +295,7 @@ function createEspn(ctx) {
       const event = await get(`/${comp.slug}/scoreboard/${id}`, 6000, fresh === true ? 0 : 1500);
       const c0 = event && Array.isArray(event.competitions) && event.competitions[0];
       if (!c0 || !Array.isArray(c0.competitors) || c0.competitors.length !== 2 || !(event.status || c0.status)) {
-        throw new Error('ESPN’s data looks different from usual, so Live can’t read it. Switch to Manual and carry on; Live keeps trying.');
+        throw new Error('The live data looks different from usual, so Live can’t read it. Switch to Manual and carry on; Live keeps trying.');
       }
       const cur = ctx.get(); // the operator may have changed things while we waited
       if (cur.mode === 'live' && cur.feed.fixtureId === id) {
@@ -402,11 +403,11 @@ function createEspn(ctx) {
     const series = (sum.seasonseries || []).find((x) => x.type === 'head-to-head') || (sum.seasonseries || [])[0];
     if (series) {
       s.h2h = {
-        text: series.summary || '',
+        text: String(series.summary || '').replace(/\b(MNC|MAN)\b/g, (c) => Match.knownCode(c)),
         games: (series.events || []).filter((e) => e.statusType && e.statusType.completed).slice(0, 5).map((e) => {
           const h = (e.competitors || []).find((c) => c.homeAway === 'home') || {};
           const a = (e.competitors || []).find((c) => c.homeAway === 'away') || {};
-          return { d: String(e.date || '').slice(0, 10), h: (h.team && h.team.abbreviation) || '', a: (a.team && a.team.abbreviation) || '', hs: Number(h.score) || 0, as: Number(a.score) || 0 };
+          return { d: String(e.date || '').slice(0, 10), h: Match.knownCode(h.team && h.team.abbreviation), a: Match.knownCode(a.team && a.team.abbreviation), hs: Number(h.score) || 0, as: Number(a.score) || 0 };
         }),
       };
     }

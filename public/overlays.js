@@ -16,6 +16,11 @@
       mount: (stage, opts) => window.DeskOverlay.mount(stage, opts),
       normalize: (state) => window.ExtrasModel.deskNormalize(state),
     },
+    games: {
+      name: 'Chat Games',
+      mount: (stage, opts) => window.GamesOverlay.mount(stage, opts),
+      normalize: (state) => window.ExtrasModel.gamesNormalize(state),
+    },
     scoreboard: {
       name: 'Live scoreboard',
       mount: (stage, opts) => window.Scoreboard.mount(stage, opts),

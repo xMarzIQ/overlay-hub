@@ -17,6 +17,15 @@ const express = require('express');
 const { WebSocketServer } = require('ws');
 const Match = require('./public/match.js');
 const Extras = require('./public/extras-model.js');
+const Games = require('./games');
+// The chat games' word list and flags; the games stay off if the files are missing
+let gameEngine = null;
+try { gameEngine = Games.createEngine(path.join(__dirname, 'wordlist')); } catch (e) { console.warn('Chat games word list not found:', e.message); }
+// All 190 flags live in one file (so the project stays under GitHub's 100-files-per-upload limit); each is served as /flags/<code>.svg
+let flagSvgs = {};
+try { flagSvgs = JSON.parse(fs.readFileSync(path.join(__dirname, 'wordlist', 'flags.json'), 'utf8')); } catch (e) { console.warn('Flags file not found:', e.message); }
+const gameMem = new Map(); // per streamer: the secret Contexto word, poll voters, giveaway entrants (memory only)
+const memFor = (st) => { if (!gameMem.has(st.id)) gameMem.set(st.id, { voters: new Map(), entrants: new Map() }); return gameMem.get(st.id); };
 const createChat = require('./chat.js');
 const createEspn = require('./espn.js');
 
@@ -45,9 +54,27 @@ const MODULES = {
   canvas: {
     defaults: Extras.canvasDefaults,
     normalize: Extras.canvasNormalize,
-    patchable: ['onAir', 'items', 'strokes', 'spot', 'music', 'boards', 'writer', 'rev'],
+    patchable: ['onAir', 'items', 'strokes', 'ink', 'spot', 'music', 'boards', 'writer', 'rev'],
     keep() {},
     after() {},
+  },
+  games: {
+    defaults: Extras.gamesDefaults,
+    normalize: Extras.gamesNormalize,
+    patchable: ['mode', 'poll', 'contexto', 'flags', 'give', 'hunt', 'writer', 'rev'],
+    // Votes, guesses, winners, scores and entries come from chat; the hub can end a round but not fake results
+    keep(prev, next) {
+      next.poll.votes = prev.poll.votes;
+      const endC = next.contexto.open;
+      ['round', 'count', 'guesses', 'last', 'winner'].forEach((k) => { next.contexto[k] = prev.contexto[k]; });
+      next.contexto.open = prev.contexto.open && endC;
+      const endF = next.flags.open;
+      ['code', 'winner', 'board'].forEach((k) => { next.flags[k] = prev.flags[k]; });
+      next.flags.open = prev.flags.open && endF;
+      next.give.entries = prev.give.entries;
+      next.give.winner = prev.give.winner;
+    },
+    after(st, prev, s) { gamesAfter(st, prev, s); },
   },
   desk: {
     defaults: Extras.deskDefaults,
@@ -61,7 +88,7 @@ const MODULES = {
     normalize: Match.normalize,
     patchable: ['mode', 'onAir', 'scale', 'delay', 'tz', 'look', 'comp', 'compLogo', 'kickoff', 'kickoffAt', 'home', 'away', 'period', 'note', 'clock',
       'added', 'score', 'pens', 'stats', 'statsShown', 'goals', 'reds', 'yellows', 'anims', 'show', 'bug', 'card', 'writer', 'rev',
-      'shoot', 'board', 'follow', 'auto', 'scenes'],
+      'shoot', 'board', 'follow', 'auto', 'scenes', 'preview'],
     keep(prev, next) { // ESPN's details, crest versions, swatches and the competition link belong to the server
       ['home', 'away'].forEach((side) => { next[side].crestV = prev[side].crestV; next[side].swatches = prev[side].swatches; });
       next.compKey = prev.compKey;
@@ -86,12 +113,15 @@ const rid = (n) => crypto.randomBytes(24).toString('base64').replace(/[^A-Za-z0-
 const byId = (id) => streamers.find((x) => x.id === id);
 const byCode = (code) => streamers.find((x) => x.code === code);
 const legacyStreamer = () => streamers.find((x) => x.legacy) || null;
+// A streamer's name doubles as their Twitch channel: "Chazza" reads twitch.tv/chazza
+const toChannel = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 25);
 const cleanName = (v, fallback) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 32) || fallback;
 // One look for all of a streamer's overlays: the font, the corners, and how overlays come on and go off.
 const cleanLook = (l) => ({
   font: ['barlow', 'oswald', 'saira'].includes(l && l.font) ? l.font : 'barlow',
   corners: (l && l.corners) === 'sharp' ? 'sharp' : 'rounded',
   anim: ['slide', 'fade', 'wipe'].includes(l && l.anim) ? l.anim : 'slide',
+  brand: /^#[0-9a-f]{6}$/i.test(String(l && l.brand)) ? String(l.brand) : '#e11d48',
 });
 // Which overlay sits on top when they overlap, top first.
 const cleanStack = (v) => {
@@ -258,6 +288,12 @@ function touch(who) {
 const canSee = (who, st) => who.role === 'owner' || (who.role === 'editor' && who.person.streamers.includes(st.id));
 // Owner-only fields that editors can't change on the scoreboard: its look and its time zone.
 const EDITOR_BLOCKED = ['look', 'tz', 'follow'];
+// Which tabs each editor can use. The owner ticks them per person; people approved before this keep every tab.
+const TABS = ['scoreboard', 'canvas', 'desk', 'games'];
+const tabsOf = (who) => (who && who.role === 'editor' && who.person && Array.isArray(who.person.tabs) ? who.person.tabs.filter((t) => TABS.includes(t)) : TABS.slice());
+const canTab = (who, id) => !who || who.role === 'owner' || tabsOf(who).includes(id);
+const modulesFor = (who, st) => (who && who.role === 'editor' ? Object.fromEntries(Object.entries(st.modules).filter(([k]) => canTab(who, k))) : st.modules);
+const cleanTabs = (v) => (Array.isArray(v) ? TABS.filter((t) => v.includes(t)) : null);
 
 /* ---------- Activity: what happened on each streamer, newest last ---------- */
 function logActivity(st, who, text) {
@@ -306,8 +342,9 @@ const keyMatches = (given) => {
 const isLive = (x) => {
   const m = x.modules;
   return !!(m.scoreboard && m.scoreboard.onAir)
-    || !!(m.canvas && m.canvas.onAir && (m.canvas.items.some((i) => i.shown) || m.canvas.strokes.length || m.canvas.spot.on || m.canvas.music.playing))
-    || !!(m.desk && m.desk.onAir && m.desk.widgets.some((w) => w.shown));
+    || !!(m.canvas && (m.canvas.items.some((i) => i.vis === 'live') || (m.canvas.ink === 'live' && m.canvas.strokes.length) || m.canvas.spot.on || m.canvas.music.playing))
+    || !!(m.desk && m.desk.widgets.some((w) => w.vis === 'live'))
+    || !!(m.games && ['poll', 'contexto', 'flags', 'give', 'hunt'].some((k) => m.games[k].vis === 'live'));
 };
 const streamerList = (who) => (who ? visibleStreamers(who) : []).map((x) => Object.assign(
   { id: x.id, name: x.name, live: isLive(x) },
@@ -322,18 +359,24 @@ function hello(ws) {
   if (!seeIt) return;
   send(ws, {
     type: 'hello', now: Date.now(), build: BUILD, locked: !!CONTROL_KEY,
-    streamer: Object.assign({ id: st.id, name: st.name, look: st.look, stack: st.stack }, ws.role === 'control' ? { code: st.code, legacy: st.legacy, hideCode: owner ? st.code : undefined } : {}),
-    modules: st.modules,
+    streamer: Object.assign({ id: st.id, name: st.name, look: st.look, stack: st.stack }, owner ? { code: st.code, legacy: st.legacy, hideCode: st.code } : {}),
+    modules: ws.role === 'control' ? modulesFor(ws.who, st) : st.modules,
   });
   if (ws.role === 'control') {
     send(ws, { type: 'streamers', list: streamerList(ws.who) });
     send(ws, { type: 'hub', tiles: hub.tiles, links: owner ? hub.links : undefined, people: owner ? peopleSummary() : undefined });
     if (owner) send(ws, { type: 'activityAll', streamer: st.id, list: st.activity.slice(-200) });
-    send(ws, { type: 'media', streamer: st.id, list: st.media, playlistMB: st.playlistMB || Math.floor(shareOf() / 1048576) });
+    if (canTab(ws.who, 'canvas')) send(ws, { type: 'media', streamer: st.id, list: st.media, playlistMB: st.playlistMB || Math.floor(shareOf() / 1048576) });
+    send(ws, { type: 'obs', streamer: st.id, count: obsCount(st.id) });
     if (owner) send(ws, { type: 'chatAll', streamer: st.id, chat: st.chat, list: st.chatLog, state: chat.status });
   }
 }
 const peopleSummary = () => ({ requests: hub.requests.length });
+const obsCount = (id) => Array.from(wss.clients).filter((c) => c.role === 'overlay' && c.streamerId === id && c.readyState === 1).length;
+function obsChanged(id) {
+  const count = obsCount(id);
+  wss.clients.forEach((c) => { if (c.role === 'control' && c.streamerId === id) send(c, { type: 'obs', streamer: id, count }); });
+}
 // Sends only what changed since the last message; if just the "last checked" time moved, a tiny tick.
 function changed(st, id, fromLive) {
   const m = st.modules[id];
@@ -353,7 +396,7 @@ function changed(st, id, fromLive) {
   st.sent[id] = { shape: now, state: Match.copy(m) };
   const wasLive = st.lastLive;
   st.lastLive = isLive(st);
-  wss.clients.forEach((ws) => { if (ws.streamerId === st.id) send(ws, msg); });
+  wss.clients.forEach((ws) => { if (ws.streamerId === st.id && (ws.role !== 'control' || canTab(ws.who, id))) send(ws, msg); });
   if (wasLive !== st.lastLive) listChanged();
   if (now !== lastSaved) {
     lastSaved = now;
@@ -379,7 +422,7 @@ function sessionsChanged() {
     const before = ws.who ? ws.who.role : 'none';
     ws.who = whoIs(ws.token);
     if (ws.who.role !== before || ws.who.role === 'editor') {
-      send(ws, { type: 'session', role: ws.who.role, reason: ws.who.reason || '' });
+      send(ws, { type: 'session', role: ws.who.role, reason: ws.who.reason || '', tabs: tabsOf(ws.who) });
       const first = visibleStreamers(ws.who)[0];
       if (!byId(ws.streamerId) || !canSee(ws.who, byId(ws.streamerId))) ws.streamerId = first ? first.id : '';
       hello(ws);
@@ -412,6 +455,9 @@ wss.on('connection', (ws, req) => {
   }
   ws.on('pong', () => { ws.alive = true; });
   ws.on('error', () => {});
+  // The hub's "OBS connected" light: tell it whenever an OBS page for this streamer connects or drops
+  if (ws.role === 'overlay' && ws.streamerId) setTimeout(() => obsChanged(ws.streamerId), 50);
+  ws.on('close', () => { if (ws.role === 'overlay' && ws.streamerId) setTimeout(() => obsChanged(ws.streamerId), 50); });
   ws.on('message', (data) => {
     let msg;
     try { msg = JSON.parse(String(data)); } catch (e) { return; }
@@ -444,6 +490,7 @@ wss.on('connection', (ws, req) => {
       const def = MODULES[msg.module];
       if (!st || !def) { send(ws, { type: 'ack', id: msg.id, ok: false, error: 'That streamer or overlay doesn’t exist any more.' }); return; }
       if (!canSee(ws.who, st)) { send(ws, { type: 'ack', id: msg.id, ok: false, error: 'auth' }); return; }
+      if (!canTab(ws.who, msg.module)) { send(ws, { type: 'ack', id: msg.id, ok: false, error: 'You don’t have access to that tab. Ask the owner.' }); return; }
       touch(ws.who);
       const prev = st.modules[msg.module];
       const draft = Match.copy(prev);
@@ -520,6 +567,7 @@ app.get('/api/session', (req, res) => {
   res.json({
     locked: !!CONTROL_KEY, build: BUILD, role: who.role, name: who.name || who.username || '', reason: who.reason || '',
     expiresAt: who.person ? who.person.expiresAt || 0 : 0,
+    tabs: tabsOf(who),
     fresh: who.role === 'owner' && freshStart,
     editorPassSet: !!hub.editorPass,
     ok: who.role === 'owner' || who.role === 'editor', // for older hub pages
@@ -588,7 +636,7 @@ const expiryFrom = (v) => {
   return Number.isFinite(t) && t > Date.now() ? t : Date.now() + 864e5;
 };
 const personView = (p) => ({
-  id: p.id, username: p.username, streamers: p.streamers, expiresAt: p.expiresAt || 0, createdAt: p.createdAt, lastSeen: p.lastSeen || 0,
+  id: p.id, username: p.username, streamers: p.streamers, tabs: Array.isArray(p.tabs) ? p.tabs : TABS.slice(), expiresAt: p.expiresAt || 0, createdAt: p.createdAt, lastSeen: p.lastSeen || 0,
   online: Array.from(wss.clients).some((ws) => ws.who && ws.who.person && ws.who.person.id === p.id),
   devices: p.devices.filter((d) => d.tokenHash).map((d) => ({ name: d.name, lastSeen: d.lastSeen || d.createdAt })),
 });
@@ -612,6 +660,7 @@ app.post('/api/people/requests/:id/:action(accept|decline)', requireOwner, (req,
   let p = hub.people.find((x) => x.username.toLowerCase() === r.username.toLowerCase());
   if (!p) { p = { id: rid(10), username: r.username, streamers: [], expiresAt: 0, createdAt: Date.now(), lastSeen: 0, devices: [] }; hub.people.push(p); }
   p.streamers = ids.length ? ids : p.streamers.length ? p.streamers : [streamers[0].id];
+  if (cleanTabs(b.tabs)) p.tabs = cleanTabs(b.tabs);
   p.expiresAt = expiryFrom(b.expires || '24h');
   p.devices = p.devices.filter((d) => d.device !== r.device).concat({ tokenHash: r.tokenHash, device: r.device, name: r.name, createdAt: Date.now(), lastSeen: Date.now() }).slice(-6);
   remember({ username: p.username, device: r.name, ok: true, what: 'Approved by the owner' });
@@ -624,6 +673,7 @@ app.patch('/api/people/:id', requireOwner, (req, res) => {
   const b = req.body || {};
   if (b.expires) p.expiresAt = expiryFrom(b.expires);
   if (Array.isArray(b.streamers)) p.streamers = b.streamers.filter((id) => byId(id));
+  if (cleanTabs(b.tabs)) p.tabs = cleanTabs(b.tabs);
   sessionsChanged();
   return res.json({ ok: true, person: personView(p) });
 });
@@ -727,7 +777,9 @@ app.get('/api/streamers', requireEditor, (req, res) => res.json({ streamers: str
 app.post('/api/streamers', requireOwner, (req, res) => {
   if (streamers.length >= MAX_STREAMERS) return res.status(400).json({ error: `The hub holds up to ${MAX_STREAMERS} streamers, to stay inside the free plan.` });
   const st = makeStreamer({ name: cleanName(req.body && req.body.name, `Streamer ${streamers.length + 1}`) });
+  if (req.body && req.body.name && toChannel(st.name).length >= 3) st.chat.channel = toChannel(st.name);
   streamers.push(st);
+  updateChat();
   logActivity(st, req.who.name, `Added ${st.name}`);
   listChanged();
   return res.json({ streamer: { id: st.id, name: st.name, code: st.code } });
@@ -736,7 +788,12 @@ app.patch('/api/streamers/:streamer', requireOwner, (req, res) => {
   const st = streamerFrom(req, res);
   if (!st) return undefined;
   const b = req.body || {};
-  if (b.name !== undefined) st.name = cleanName(b.name, st.name);
+  if (b.name !== undefined) {
+    const before = st.name;
+    st.name = cleanName(b.name, st.name);
+    // The chat channel follows the name, unless the owner typed a different channel
+    if (!st.chat.channel || st.chat.channel === toChannel(before)) { st.chat.channel = toChannel(st.name).length >= 3 ? toChannel(st.name) : st.chat.channel; updateChat(); }
+  }
   if (b.look) st.look = cleanLook(Object.assign({}, st.look, b.look));
   if (b.stack) st.stack = cleanStack(b.stack);
   listChanged();
@@ -796,7 +853,22 @@ setInterval(() => streamers.forEach(autopilot), 10 * 1000).unref();
 
 function hideAll(st, who) {
   st.hiddenAt = Date.now();
-  Object.keys(st.modules).forEach((m) => { if (st.modules[m].onAir) { st.modules[m].onAir = false; changed(st, m); } });
+  // Every overlay off: the scoreboard, each Canvas item and the drawing, and each Stream Desk widget, previews included
+  const sb = st.modules.scoreboard;
+  if (sb.onAir || sb.preview) { sb.onAir = false; sb.preview = false; changed(st, 'scoreboard'); }
+  const cv = st.modules.canvas;
+  if (cv.items.some((i) => i.vis !== 'off') || cv.ink !== 'off' || cv.spot.on || cv.music.playing) {
+    cv.items.forEach((i) => { i.vis = 'off'; });
+    cv.ink = 'off';
+    cv.spot.on = false;
+    cv.music.playing = false;
+    changed(st, 'canvas');
+  }
+  const dk = st.modules.desk;
+  if (dk.widgets.some((w) => w.vis !== 'off')) { dk.widgets.forEach((w) => { w.vis = 'off'; }); changed(st, 'desk'); }
+  const gm = st.modules.games;
+  const GK = ['poll', 'contexto', 'flags', 'give', 'hunt'];
+  if (gm && GK.some((k) => gm[k].vis !== 'off')) { GK.forEach((k) => { gm[k].vis = 'off'; }); changed(st, 'games'); }
   logActivity(st, who, 'Hid everything');
   listChanged();
 }
@@ -832,7 +904,7 @@ function removeMedia(st, f) {
   fs.promises.unlink(path.join(MEDIA_DIR, `${f.id}.${f.ext}`)).catch(() => {});
 }
 function mediaChanged(st) {
-  wss.clients.forEach((ws) => { if (ws.role === 'control' && ws.streamerId === st.id && ws.who && canSee(ws.who, st)) send(ws, { type: 'media', streamer: st.id, list: st.media, playlistMB: st.playlistMB || Math.floor(shareOf() / 1048576) }); });
+  wss.clients.forEach((ws) => { if (ws.role === 'control' && ws.streamerId === st.id && ws.who && canSee(ws.who, st) && canTab(ws.who, 'canvas')) send(ws, { type: 'media', streamer: st.id, list: st.media, playlistMB: st.playlistMB || Math.floor(shareOf() / 1048576) }); });
   saveSoon();
 }
 app.post('/api/media', requireOwner, express.raw({ type: () => true, limit: '31mb' }), wrap(async (req, res) => {
@@ -917,11 +989,87 @@ const chat = createChat({
       st.chatLog.push(m);
       if (st.chatLog.length > 80) st.chatLog.shift();
       wss.clients.forEach((ws) => { if (ws.role === 'control' && ws.streamerId === st.id && ws.who && ws.who.role === 'owner') send(ws, { type: 'chat', streamer: st.id, msg: m }); });
-      if (st.chat.commands && m.text.startsWith('!') && st.chat.allow.includes(m.login)) chatCommand(st, m);
+      routeChat(st, m);
     });
   },
   onStatus(state) { wss.clients.forEach((ws) => { if (ws.role === 'control' && ws.who && ws.who.role === 'owner') send(ws, { type: 'chatStatus', state }); }); },
 });
+function routeChat(st, m) {
+  if (st.chat.commands && m.text.startsWith('!') && st.chat.allow.includes(m.login)) chatCommand(st, m);
+  const gm = st.modules.games;
+  if (!gameEngine || !gm) return;
+  const hadFlagWinner = !!gm.flags.winner;
+  if (!Games.handleChat(gm, memFor(st), m, gameEngine)) return;
+  gamesChanged(st);
+  // The flag game moves on to the next flag by itself after a few seconds
+  if (!hadFlagWinner && gm.flags.winner && gm.flags.auto) {
+    const round = gm.flags.round;
+    setTimeout(() => {
+      const g = st.modules.games;
+      if (!g || g.flags.round !== round || g.flags.open || g.flags.vis === 'off') return;
+      g.flags.round += 1; g.flags.code = gameEngine.flagPick(g.flags.code); g.flags.winner = null; g.flags.open = true;
+      changed(st, 'games');
+    }, 6000);
+  }
+}
+// Many messages at once: send the games' changes to pages at most four times a second
+const gameTimers = new Map();
+function gamesChanged(st) {
+  if (gameTimers.has(st.id)) return;
+  gameTimers.set(st.id, setTimeout(() => { gameTimers.delete(st.id); changed(st, 'games'); listChanged(); }, 250));
+}
+// Host buttons (reset votes, next flag, draw a winner, hint) take effect here
+function gamesAfter(st, prev, s) {
+  const mem = memFor(st);
+  if (s.poll.reset !== prev.poll.reset) { mem.voters.clear(); s.poll.votes = [0, 0, 0, 0]; }
+  if (s.flags.round !== prev.flags.round && gameEngine) { s.flags.code = gameEngine.flagPick(prev.flags.code); s.flags.winner = null; s.flags.open = true; }
+  if (s.flags.boardReset !== prev.flags.boardReset) s.flags.board = [];
+  if (s.give.reset !== prev.give.reset) { mem.entrants.clear(); s.give.entries = 0; s.give.winner = ''; }
+  if (s.give.draw !== prev.give.draw) {
+    const all = Array.from(mem.entrants.values());
+    s.give.winner = all.length ? all[Math.floor(Math.random() * all.length)] : '';
+    s.give.open = false;
+  }
+  if (s.contexto.hint !== prev.contexto.hint && gameEngine && s.contexto.open) {
+    const h = gameEngine.contextoHint(mem, s.contexto.guesses.length ? s.contexto.guesses[0].r : 3000);
+    if (h) {
+      mem.guessed.add(h.w);
+      s.contexto.last = { w: h.w, r: h.r, u: 'Hint' };
+      s.contexto.guesses = s.contexto.guesses.concat({ w: h.w, r: h.r, u: 'Hint' }).sort((a, b) => a.r - b.r).slice(0, 10);
+    }
+  }
+}
+// Starting a Contexto round: the secret word stays on the server; only the hub that started it is told the word
+app.get('/flags/:file', (req, res) => {
+  const m = /^([a-z]{2}(?:-[a-z]{3})?)\.svg$/.exec(req.params.file);
+  const svg = m && flagSvgs[m[1]];
+  if (!svg) return res.status(404).end();
+  res.set({ 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=604800' });
+  return res.send(svg);
+});
+app.post('/api/streamers/:streamer/games/contexto', requireEditor, (req, res) => {
+  const st = streamerFrom(req, res);
+  if (!st) return;
+  if (!canTab(req.who, 'games')) return res.status(403).json({ error: 'You don’t have access to Chat Games. Ask the owner.' });
+  if (!gameEngine) return res.status(503).json({ error: 'The word list isn’t installed on the server.' });
+  const r = gameEngine.contextoStart(memFor(st), String((req.body && req.body.word) || '').trim());
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  const g = st.modules.games;
+  Object.assign(g.contexto, { open: true, round: g.contexto.round + 1, count: 0, guesses: [], last: null, winner: null });
+  logActivity(st, req.who.name, 'Started a Contexto round');
+  changed(st, 'games');
+  res.json({ ok: true, word: r.word });
+});
+// For testing only (switched off unless CHAT_TEST=1): feed a chat message in as if it came from Twitch
+if (process.env.CHAT_TEST === '1') {
+  app.post('/api/test/chat', requireOwner, (req, res) => {
+    const st = streamerFrom(req, res);
+    if (!st) return;
+    const u = String(req.body.u || 'viewer');
+    routeChat(st, { u, login: u.toLowerCase(), text: String(req.body.text || ''), at: Date.now() });
+    res.json({ ok: true });
+  });
+}
 function chatCommand(st, m) {
   const cmd = m.text.trim().toLowerCase().split(/\s+/)[0];
   const sb = st.modules.scoreboard;

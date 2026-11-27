@@ -109,6 +109,7 @@
           <div class="set-row"><span class="set-name">Font</span>${seg('look-font', l.font || 'barlow', [['barlow', 'Barlow'], ['oswald', 'Oswald'], ['saira', 'Saira']])}</div>
           <div class="set-row"><span class="set-name">Corners</span>${seg('look-corners', l.corners || 'rounded', [['rounded', 'Rounded'], ['sharp', 'Sharp']])}</div>
           <div class="set-row"><span class="set-name">On and off<small>How overlays come on screen and go off</small></span>${seg('look-anim', l.anim || 'slide', [['slide', 'Slide'], ['fade', 'Fade'], ['wipe', 'Wipe']])}</div>
+          <div class="set-row"><span class="set-name">Brand colour<small>One colour for every overlay: the scoreboard's accent when set to Brand, and the first swatch in Canvas and Stream Desk</small></span><input type="color" data-set="brand" value="${esc(l.brand || '#e11d48')}" aria-label="Brand colour" class="brand-pick"></div>
         </div>
         <div class="set-group"><h4>Stacking order</h4><p class="note">When overlays overlap, the one at the top of this list sits in front. More overlays join this list as they’re added.</p>
           <div class="order-list">${stack.map((x, i) => `<div class="order-item" data-id="${x.id}"><span class="set-name">${esc(x.label)}</span><span class="order-btns"><button class="btn" type="button" data-set="stack-move" data-d="-1"${i === 0 ? ' disabled' : ''} aria-label="Move up">↑</button><button class="btn" type="button" data-set="stack-move" data-d="1"${i === stack.length - 1 ? ' disabled' : ''} aria-label="Move down">↓</button></span></div>`).join('')}</div></div></div>`);
@@ -116,19 +117,23 @@
     people() {
       if (!people) return h('<div><h3>People</h3><p class="lead">Loading…</p></div>');
       const streamers = Hub.streamers;
+      const TAB_NAMES = [['scoreboard', 'Live scoreboard'], ['canvas', 'Canvas'], ['desk', 'Stream Desk'], ['games', 'Chat Games']];
+      const tabChecks = (name, chosen) => `<div class="checks">${TAB_NAMES.map(([v, l]) => `<label><input type="checkbox" name="${name}" value="${v}"${chosen.includes(v) ? ' checked' : ''}>${l}</label>`).join('')}</div>`;
       const checks = (name, chosen) => `<div class="checks">${streamers.map((x) => `<label><input type="checkbox" name="${name}" value="${x.id}"${chosen.includes(x.id) ? ' checked' : ''}>${esc(x.name)}</label>`).join('')}</div>`;
       const access = (name, val) => `<select class="select" name="${name}" aria-label="How long their access lasts">${ACCESS.map(([v, label]) => `<option value="${v}"${v === val ? ' selected' : ''}>${label}</option>`).join('')}</select>`;
       const reqs = people.requests.map((r) => `<div class="person" data-req="${r.id}"><div class="person-top"><b>${esc(r.username)}</b><small>${esc(r.device)}, asked ${when(r.at)}</small></div>
-        ${checks(`rs-${r.id}`, streamers[0] ? [streamers[0].id] : [])}
+        <small class="note">Streamers they can run:</small>${checks(`rs-${r.id}`, streamers[0] ? [streamers[0].id] : [])}
+        <small class="note">Tabs they can use:</small>${tabChecks(`rt-${r.id}`, TAB_NAMES.map((t) => t[0]))}
         <div class="person-actions">${access(`ra-${r.id}`, '24h')}<button class="btn btn-primary btn-small" type="button" data-set="req-accept">Accept</button><button class="btn btn-quiet btn-small" type="button" data-set="req-decline">Decline</button></div></div>`).join('');
       const list = people.people.map((p) => `<div class="person" data-person="${p.id}"><div class="person-top"><b>${esc(p.username)}</b><span class="pill${p.online ? ' is-on' : ''}">${p.online ? 'Online now' : `Last seen ${when(p.lastSeen)}`}</span><span class="pill">${left(p.expiresAt)}</span><span class="grow"></span>
         <button class="btn btn-quiet btn-small${confirming.get(`del|${p.id}`) ? ' is-confirming' : ''}" type="button" data-set="person-del">${confirming.get(`del|${p.id}`) ? 'Tap again' : 'Remove'}</button></div>
         <small class="note">Streamers they can run:</small>${checks(`ps-${p.id}`, p.streamers)}
+        <small class="note">Tabs they can use:</small>${tabChecks(`pt-${p.id}`, p.tabs || TAB_NAMES.map((t) => t[0]))}
         <div class="person-actions"><span class="note">Access:</span>${access(`pa-${p.id}`, '')}<button class="btn btn-small" type="button" data-set="person-access">Set</button>
         <span class="note">${p.devices.map((d) => esc(d.name)).join(', ') || 'No devices signed in'}</span></div></div>`).join('');
       const hist = people.signins.map((x) => `<li><time>${when(x.at)}</time><span${x.ok ? '' : ' class="bad"'}><b>${esc(x.username)}</b>${x.device ? `, ${esc(x.device)}` : ''}: ${esc(x.what)}</span></li>`).join('');
       return h(`<div>
-        <h3>People</h3><p class="lead">Editors sign in with their name and the editor password, then wait for you. You choose how long their access lasts and which streamers they can run. Editors can run overlays, but not Links, Activity, People, settings or uploads.</p>
+        <h3>People</h3><p class="lead">Editors sign in with their name and the editor password, then wait for you. You choose how long their access lasts and which streamers they can run. Editors can only use the tabs you tick for them, and never see the OBS link, Links, Activity, Chat, People, settings or uploads.</p>
         ${people.editorPassSet ? '' : '<p class="tip" style="display:block">Set an editor password in Passwords first, so editors can ask for access.</p>'}
         <div class="set-group"><h4>Waiting for you${people.requests.length ? ` (${people.requests.length})` : ''}</h4>${reqs || '<p class="note">Nobody’s waiting. Requests not answered in 24 hours are declined by themselves.</p>'}</div>
         <div class="set-group"><h4>Editors</h4><div class="people-list">${list || '<p class="note">No editors yet.</p>'}</div></div>
@@ -241,8 +246,10 @@
         const id = card.dataset.req;
         const streamers = Array.from(card.querySelectorAll(`input[name="rs-${id}"]:checked`)).map((x) => x.value);
         if (!streamers.length) { Hub.toast('Tick at least one streamer they can run.', { tone: 'bad' }); break; }
+        const tabs = Array.from(card.querySelectorAll(`input[name="rt-${id}"]:checked`)).map((x) => x.value);
+        if (!tabs.length) { Hub.toast('Tick at least one tab they can use.', { tone: 'bad' }); break; }
         const expires = card.querySelector(`select[name="ra-${id}"]`).value;
-        act(() => Hub.call('POST', `/api/people/requests/${id}/accept`, { streamers, expires }), 'Approved. They’re in.').then(loadPeople);
+        act(() => Hub.call('POST', `/api/people/requests/${id}/accept`, { streamers, tabs, expires }), 'Approved. They’re in.').then(loadPeople);
         break;
       }
       case 'req-decline': act(() => Hub.call('POST', `/api/people/requests/${b.closest('[data-req]').dataset.req}/decline`), 'Declined').then(loadPeople); break;
@@ -276,6 +283,7 @@
   // Streamer ticks and tile names save as soon as they change
   dialog.addEventListener('change', (e) => {
     const t = e.target;
+    if (t.dataset.set === 'brand') { patchStreamer({ look: { brand: t.value } }); return; }
     if (t.dataset.set === 'tile-name') {
       const names = Object.assign({}, Hub.hubSettings.tiles.names);
       names[t.closest('[data-id]').dataset.id] = t.value;
@@ -283,7 +291,12 @@
     } else if (t.name && t.name.startsWith('ps-')) {
       const card = t.closest('[data-person]');
       const streamers = Array.from(card.querySelectorAll(`input[name="${t.name}"]:checked`)).map((x) => x.value);
-      act(() => Hub.call('PATCH', `/api/people/${card.dataset.person}`, { streamers }), 'Streamers updated');
+      act(() => Hub.call('PATCH', `/api/people/${card.dataset.person}`, { streamers }), 'Streamers updated').then(loadPeople);
+    } else if (t.name && t.name.startsWith('pt-')) {
+      const card = t.closest('[data-person]');
+      const tabs = Array.from(card.querySelectorAll(`input[name="${t.name}"]:checked`)).map((x) => x.value);
+      if (!tabs.length) { t.checked = true; Hub.toast('Leave at least one tab ticked. To stop someone completely, use Remove.', { tone: 'bad' }); return; }
+      act(() => Hub.call('PATCH', `/api/people/${card.dataset.person}`, { tabs }), 'Tabs updated. It changes on their screen straight away.').then(loadPeople);
     } else if (t.dataset.set === 'restore-file' && t.files && t.files[0]) {
       const file = t.files[0];
       t.value = '';

@@ -22,6 +22,16 @@ The server is Node.js with Express and ws. Changes reach every open page over a 
 - Each streamer’s live scoreboard is completely separate: their own match, score, clock, teams, layout and stream delay. If two streamers follow the same match, the server asks ESPN once and shares the answer.
 - The hub holds up to 10 streamers and 30 connected devices at once, to stay inside the free plan.
 
+## Finding your way
+
+- **Every overlay has the same three buttons:** **Off** and **Show preview**, then **Show on screen** once it's in preview. That covers the scoreboard, each Canvas item, your drawing and each Stream Desk widget.
+- **Preview** means it shows in the hub's preview with a dashed yellow outline, but not on stream. **On screen** means viewers can see it. **Off** means it's nowhere.
+- **The preview in the hub** always shows what's on screen, plus anything in preview.
+- **Move anything** by dragging it on the preview: the scoreboard and its cards, Canvas items and Stream Desk widgets. Sizes are sliders.
+- **Hide everything** turns every overlay off, previews included.
+- **Every page is grouped into dropdowns,** with only the everyday ones open. The hub remembers what you open.
+- **Live** follows a real match from ESPN by itself; **Manual** changes only when you press something.
+
 ## People: you and your editors
 
 - **You're the owner.** Sign in on the Owner tab with your `CONTROL_KEY` (or an owner password you set in Settings, Passwords). The `CONTROL_KEY` always works, so you can't lock yourself out.
@@ -60,14 +70,14 @@ The server is Node.js with Express and ws. Changes reach every open page over a 
 Draw and place things on the stream, on the same OBS link.
 
 - **Draw on the preview:**
-  - pen in 6 colours and any thickness, arrows, an eraser (tap a line), undo and clear
+  - pen in 6 colours and any thickness, arrows, an eraser (tap a line), undo and clear; your drawing has its own Off, Show preview and Show on screen
   - fading ink that disappears after a few seconds
   - a laser pointer that shows only while you hold it
   - a spotlight that dims everything but one spot
 - **Add:**
   - text, web pages, YouTube videos and QR codes
   - a tactics pitch to draw plays on, and pictures from the library
-  New things start hidden. Choose a place (9 spots), a size, a timer that hides them, and which sits in front, then press Show.
+  New things start in preview. Drag them where you want them, set the size, optionally a timer that turns them off, then press Show on screen.
 - **Library:** the owner uploads pictures (up to 8 MB) and MP3s (up to 30 MB), and must tick that they have the right to use them. Editors can use everything in it but can't add or delete; their files show as locked.
 - **Music:** play, pause, next and repeat, with volume.
   - The playlist has a space limit. When a new song won't fit, the oldest unpinned song that isn't playing is removed; pin songs to keep them.
@@ -76,19 +86,15 @@ Draw and place things on the stream, on the same OBS link.
 
 ## Stream Desk
 
-Everyday widgets, each with its own Show switch, place (9 spots) and size.
+Everyday widgets for any stream. Each one is bold floating text with no box, in any colour, and you drag it anywhere on the preview. Each widget is its own dropdown, with the three buttons, a label, a colour and a size:
 
-- **Timers:**
-  - count down or up, with text for when they hit zero
-  - a **Matchday countdown** to a date and time
-- **Counters:** with a step and an optional goal bar.
-- **Text:** a headline, or scrolling.
-- **Lists:**
-  - **to-do:** tick things off
-  - **shopping:** with prices and a budget showing what's left, or how far over
-  - **top list:** numbered
-  - **tier list:** S to D
-- **My match:** your own scoreboard, with +1 for each side, undo, and full time adding the result to a session tally (W, D, L). Type a squad and "Pick two teams" splits it at random.
+- **Timer:** xx:xx:xx, counting down from the minutes you set or counting up, with start, pause and reset.
+- **Countdown:** xx:xx:xx to a date and time, with optional text for when it hits zero.
+- **Counter:** plus and minus, with an optional goal (37 / 50).
+- **Text:** still or scrolling.
+- **Checklist:** tick things off as you go.
+- **Budget list:** items with prices and a budget. What's left turns yellow when it's nearly spent and red when you're over.
+- **Clock:** the time where you are, like Miami, with or without seconds.
 
 ## Chat (owner)
 
@@ -326,3 +332,23 @@ Dockerfile                    build for Northflank or any Docker host
 ```
 
 Fonts come from Google Fonts and crests and competition logos from ESPN, so the OBS machine needs internet access.
+
+## Chat Games
+
+The Chat Games tab runs games your Twitch chat plays. Chat is read from the streamer's channel in the Chat tab; adding a streamer sets that channel from their name automatically.
+
+- **Poll**: a question with 2 to 4 answers. Chat votes by typing 1, 2, 3 or 4, one vote each, and can change it.
+- **Contexto**: you type a secret word (or tap Random word). Every guess in chat gets a number for how close it is in meaning; 1 is the word itself, and the first person to get it wins. Give a hint if chat gets stuck.
+- **Flag game**: a flag shows on stream and the first person to name the country wins the point. 190 flags, including England, Scotland, Wales and Northern Ireland. The next flag can come up by itself.
+- **Giveaway**: viewers type the entry word (normally !join), one entry each, and a winner is drawn at random.
+- **Scavenger hunt**: a square grid of things to find (3 by 3, 4 by 4 or 5 by 5) that you tick off.
+
+Guesses: any single word counts while a game runs, or switch to "Only !g word" so normal chat doesn't count.
+
+The word list (wordlist/, about 1 MB, made from the free GloVe word set) and the flags (wordlist/flags.json, all 190 in one file of about 1.4 MB so the project stays under GitHub's 100-files-per-upload limit, from the open-source flag-icons set, MIT licence) are part of the app. They don't use your 700 MB upload space, and viewers only ever download the one flag on screen.
+
+## Editors and what they can see
+
+In Settings, People, you choose for each editor which streamers they can run and which tabs they can use (Live scoreboard, Canvas, Stream Desk, Chat Games). The server enforces it: an editor's hub never receives the other tabs, and any change they try there is refused. Changes reach their screen straight away.
+
+Editors never see the OBS link or the Hide link, so they can't copy or pass them on. They also can't see Links, Activity, Chat, People, settings or uploads. People approved before tab choices existed keep every tab until you untick some.

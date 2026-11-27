@@ -842,3 +842,135 @@ html[data-theme="daylight"] .quick-bar { background: rgba(255, 255, 255, .92); }
 .meter i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #22c55e, #4ade80); }
 .meter.is-amber i { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
 .meter.is-red i { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+/* =====================================================================================
+   Calmer pages: dropdown groups (fold.js)
+   ===================================================================================== */
+.folds { display: grid; gap: 10px; }
+.monitor-col > .fold { order: 5; }
+.fold { border-radius: 20px; background: var(--panel); box-shadow: 0 0 0 1px var(--line); }
+.fold > summary { display: grid; grid-template-columns: 44px minmax(0, 1fr) 28px; align-items: center; gap: 12px; min-height: 68px; padding: 10px 14px; border-radius: 20px; cursor: pointer; list-style: none; -webkit-tap-highlight-color: transparent; }
+.fold > summary::-webkit-details-marker { display: none; }
+@media (hover: hover) { .fold > summary:hover { background: color-mix(in srgb, var(--panel-2) 70%, transparent); } }
+.fold > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.fold-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 13px; color: var(--crimson-hi); background: color-mix(in srgb, var(--crimson) 14%, transparent); }
+.fold-icon:empty { display: none; }
+.fold-text { display: grid; gap: 3px; min-width: 0; }
+.fold-text b { font: 700 21px/1.1 var(--cond); letter-spacing: .01em; color: var(--ink); }
+.fold-text small { font: 500 14px/1.3 var(--ui); color: var(--ink-2); }
+.fold-chev { width: 28px; height: 28px; border-radius: 50%; background: var(--well); position: relative; transition: transform 240ms var(--ease-out); }
+.fold-chev::before { content: ""; position: absolute; left: 9px; top: 8px; width: 8px; height: 8px; border-right: 2px solid var(--ink-2); border-bottom: 2px solid var(--ink-2); transform: rotate(45deg); }
+.fold[open] > summary .fold-chev { transform: rotate(180deg); }
+.fold[open] > summary { border-radius: 20px 20px 0 0; border-bottom: 1px solid var(--line); }
+.fold-body { display: grid; gap: 12px; padding: 14px; }
+/* Inside a group, the old headings and boxes step back so it doesn't feel like boxes in boxes */
+.fold-body > .panel, .fold-body > .deck, .fold-body > .ex-group, .fold-body > .box, .fold-body > .cv-panel, .fold-body > .dk-panel { padding: 0; margin: 0; border: 0; background: none; box-shadow: none; }
+.fold-body > .ex-group > h3, .fold-body > .cv-panel > h3, .fold-body > .dk-panel > h3, .fold-body > .panel > .panel-head h2, .fold-body .look > .look-title { display: none; }
+.fold-body > .panel > .panel-head p { margin: 0; }
+.fold-body > .module-tools { margin: 0; padding: 0; background: none; box-shadow: none; }
+.fold-body > .item { border-radius: 14px; background: var(--panel-2); }
+.fold-body > .item-row { padding: 10px 12px; border-radius: 14px; background: var(--panel-2); }
+.tab-panel.is-emptied { display: none !important; }
+/* The background options under the practice view: one small dropdown */
+.view-opts { position: relative; }
+.view-opts > summary { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 12px; background: var(--well); color: var(--ink-2); font: 600 14px/1 var(--ui); cursor: pointer; list-style: none; }
+.view-opts > summary::-webkit-details-marker { display: none; }
+.view-opts > summary::after { content: ""; width: 6px; height: 6px; margin-left: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.view-opts-body { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; display: grid; gap: 10px; padding: 12px; border-radius: 16px; background: var(--panel); box-shadow: 0 0 0 1px var(--line-2), 0 18px 40px -14px rgba(0, 0, 0, .8); }
+/* Bigger, clearer words for the two monitor choices */
+#modeSeg button { min-height: 44px; padding: 0 16px; font-size: 15px; }
+
+.dk-card { padding: 0; gap: 0; }
+.dk-card > summary { grid-template-columns: minmax(0, 1fr) auto 28px; min-height: 60px; }
+.dk-card .pill { white-space: nowrap; }
+
+.dk-card { display: block; }
+/* Practice chips wrap inside their dropdown instead of running off the side */
+.fold-body #sampleTools, .fold-body #sampleTools > * { display: flex; flex-wrap: wrap; gap: 6px; overflow: visible; max-width: 100%; white-space: normal; }
+.fold-body #sampleTools .chip { flex: 0 0 auto; }
+/* The two switches at the top of each page wrap on small phones */
+.module-bar-row { flex-wrap: wrap; row-gap: 8px; }
+.module-bar-row > .seg { flex: 1 1 auto; }
+.module-bar-row > .seg button { white-space: nowrap; }
+@media (max-width: 520px) { .module-bar-row { grid-template-columns: minmax(0, 1fr); } }
+/* Four-choice switches wrap into two rows on small phones */
+@media (max-width: 520px) { .fold-body .seg:has(> button:nth-child(4)) { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* =====================================================================================
+   Off, Show preview, Show on screen: the same three buttons for every overlay
+   ===================================================================================== */
+.vis { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vis .btn { min-height: 44px; }
+.vis-state { display: inline-flex; align-items: center; gap: 8px; padding: 0 4px; font: 700 15px/1 var(--ui); color: var(--ink); }
+.vis-state.is-quiet { color: var(--ink-3); font-weight: 600; }
+.vis.is-preview .vis-state { color: #ffd166; }
+.vis.is-live .vis-state { color: #ff8095; }
+.vis.is-live .vis-state i { width: 10px; height: 10px; border-radius: 50%; background: #ff3b5c; box-shadow: 0 0 10px #ff3b5c; animation: livePulse 1.6s ease-in-out infinite; }
+@keyframes livePulse { 50% { opacity: .45; } }
+.vis-pv { background: linear-gradient(180deg, #ffe08a, #f2b33d); color: #221500; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 2px 0 #8a5a00; }
+.vis-go { min-height: 48px; padding: 0 22px; font-size: 16px; color: #04210f; background: linear-gradient(180deg, #4ff59a, #18c06a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 3px 0 #0b6b37, 0 12px 24px -12px rgba(24, 192, 106, .9); }
+.vis-off { color: var(--ink); }
+#sbVis { min-height: 48px; display: flex; align-items: center; }
+.module-bar-row:has(#sbVis) { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; }
+@media (max-width: 520px) { .module-bar-row:has(#sbVis) { grid-template-columns: minmax(0, 1fr); } }
+.monitor-legend { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font: 600 13.5px/1.2 var(--ui); }
+.monitor-legend i { width: 22px; height: 14px; border-radius: 3px; border: 2px dashed rgba(255, 209, 102, .9); }
+/* Canvas and Stream Desk tiles: each item has its own buttons, so the tile's Show and Off go */
+.tile[data-tile="canvas"] .tile-foot .seg, .tile[data-tile="desk"] .tile-foot .seg { display: none; }
+/* The drawing's own row, and items with their buttons */
+.cv-ink-row { display: grid; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--panel-2); }
+.cv-ink-name { font: 700 15px/1.2 var(--ui); }
+.cv-row.is-item { gap: 10px; }
+/* Stream Desk dropdowns */
+.dk-card .fold-body { display: grid; gap: 12px; }
+.dk-icon { font: 800 20px/1 var(--cond); }
+.pill.is-pv { color: #ffd166; }
+.dk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dk-read { min-width: 140px; font: 800 40px/1 var(--cond); font-variant-numeric: tabular-nums; }
+.dk-step { width: 56px; font-size: 24px; }
+.dk-inline { display: inline-flex; align-items: center; gap: 8px; font: 600 14px/1 var(--ui); color: var(--ink-2); }
+.dk-inline .input { width: 110px; min-height: 40px; }
+.dk-look { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.dk-look .dk-inline .input { width: 220px; }
+.dk-colours { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dk-colours button { width: 36px; height: 36px; border: 0; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .25); }
+.dk-colours button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--ink); }
+.dk-colours input[type="color"] { width: 40px; height: 40px; padding: 0; border: 0; background: none; cursor: pointer; }
+.dk-size input { width: 180px; }
+.dk-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.dk-price { width: 90px; }
+.dk-card > summary { grid-template-columns: 44px minmax(0, 1fr) auto 28px; }
+
+/* Everything in the control app a bit smaller, so more fits on the screen */
+@media (min-width: 761px) { body { zoom: .85; } }
+@media (max-width: 760px) { body { zoom: .92; } }
+
+.fold-body > .more-h { margin: 8px 0 -4px; font: 700 16px/1.2 var(--ui); color: var(--ink); }
+.fold-body > .more-h:first-child { margin-top: 0; }
+
+.cv-colours input[type="color"], .cv-ctl input[type="color"] { width: 40px; height: 40px; padding: 0; border: 0; background: none; cursor: pointer; }
+
+/* Loose rows line up with the other settings rows in a group */
+.fold-body > .item-row { padding: 10px 14px; margin: 0; }
+
+/* The "OBS connected" light */
+.obs-pill i { background: var(--ink-3); box-shadow: none; }
+.obs-pill[data-state="on"] i { background: #3ccf7d; box-shadow: 0 0 8px #3ccf7d; }
+.obs-pill[data-state="off"] { color: var(--ink-2); }
+.brand-pick { width: 52px; height: 40px; padding: 0; border: 0; background: none; cursor: pointer; }
+@media (max-width: 760px) { .obs-pill span { display: none; } }
+
+#inBrand { display: none; }
+
+/* Chat Games controls */
+.gm-ctl-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; }
+.gm-ctl-name { font-weight: 700; }
+.gm-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 10px 0; }
+.hn-edit { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.hn-ed { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2, rgba(255, 255, 255, .03)); }
+.hn-ed .input { min-width: 0; padding: 8px 10px; font-size: 14px; }
+.hn-ed button { min-height: 36px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink); font-weight: 700; cursor: pointer; }
+.hn-ed button[aria-pressed="true"] { border-color: #2ee59d; background: rgba(46, 229, 157, .16); color: #2ee59d; }
+.hn-ed button:disabled { opacity: .4; cursor: default; }
+.link-btn { padding: 0; border: 0; background: none; color: var(--accent, #7c5cff); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+@media (max-width: 520px) { .hn-edit { gap: 5px; } .hn-ed { padding: 5px; } .hn-ed .input { font-size: 12px; padding: 6px; } }

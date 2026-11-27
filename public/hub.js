@@ -37,10 +37,10 @@
 
   // The hub page. Overlays that aren't built yet show as "coming soon" tiles.
   const TILES = [
-    { id: 'scoreboard', name: 'Live scoreboard', desc: 'Score, clock, stats and goals, live from ESPN or by hand', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M6.5 10.5v3M17.5 10.5v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' },
+    { id: 'scoreboard', name: 'Live scoreboard', desc: 'Score, clock, stats and goals, live or by hand', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M6.5 10.5v3M17.5 10.5v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' },
     { id: 'canvas', name: 'Canvas', desc: 'Draw, pictures, web pages, YouTube, QR codes, music and a tactics board', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20l3.5-.8L19 7.7a2 2 0 0 0 0-2.8l-.9-.9a2 2 0 0 0-2.8 0L3.8 15.5 3 19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 5.5l4.5 4.5" stroke="currentColor" stroke-width="2"/></svg>' },
-    { id: 'desk', name: 'Stream Desk', desc: 'Timers, counters, text, lists and your own match scoreboard', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9v4l2.5 2M9.5 3h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
-    { id: 'alerts', soon: true, name: 'Alerts', desc: 'Follow and sub pop-ups', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 20.5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' },
+    { id: 'desk', name: 'Stream Desk', desc: 'Timer, countdown, counter, text, lists and a clock', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9v4l2.5 2M9.5 3h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+    { id: 'games', name: 'Chat Games', desc: 'Polls, Contexto, the flag game, giveaways and a scavenger hunt', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 8h10a4 4 0 0 1 4 4v1.5a3.5 3.5 0 0 1-6.2 2.2L14 14.5h-4l-.8 1.2A3.5 3.5 0 0 1 3 13.5V12a4 4 0 0 1 4-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 11v3M6.5 12.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="11.5" r="1.1" fill="currentColor"/><circle cx="17.8" cy="13.4" r="1.1" fill="currentColor"/></svg>' },
   ];
   const CONN_TEXT = { connecting: 'Connecting…', live: 'Connected', reconnecting: 'Reconnecting…', error: 'Last change wasn’t saved' };
 
@@ -65,6 +65,10 @@
   let token = store.get(TOKEN_STORE, '');
   let locked = false;   // the server has a CONTROL_KEY, so people have to sign in
   let role = 'none';    // 'owner', 'editor', 'pending' or 'none'
+  // The tabs this person can use: everything for the owner; for an editor, what the owner ticked in People
+  const ALL_TABS = ['scoreboard', 'canvas', 'desk', 'games'];
+  let tabs = ALL_TABS.slice();
+  const allowedTab = (id) => role !== 'editor' || !ALL_TABS.includes(id) || tabs.includes(id);
   let session = {};
   let waitTimer = 0;
   const blocked = () => locked && role !== 'owner' && role !== 'editor';
@@ -75,7 +79,9 @@
     } catch (e) { return; } // the connection pill already says the server can't be reached
     locked = !!session.locked;
     role = session.role || 'none';
+    tabs = Array.isArray(session.tabs) ? session.tabs : ALL_TABS.slice();
     applyRole();
+    if (el.tiles) { paintTiles(); route(true); }
   }
   function applyRole() {
     document.documentElement.dataset.role = role;
@@ -239,16 +245,17 @@
     monitorMode = mode === 'preview' ? 'preview' : 'output';
     store.set('hub-monitor', monitorMode);
     paintMonitor();
-    if (!quiet) toast(monitorMode === 'preview' ? 'Preview: shows overlays as if they were on screen.' : 'Live output: exactly what viewers see.');
+    if (!quiet) toast(monitorMode === 'preview' ? 'Practice view: only you can see this. Try things here first.' : 'What viewers see: exactly what’s on the stream right now.');
   }
   function paintMonitor() {
     Object.values(modules).forEach((m) => {
       if (!m.live) return;
       const sample = m.hooks.previewState && m.hooks.previewState();
-      const s = sample || (monitorMode === 'preview' ? Object.assign({}, m.live, { onAir: true }) : m.live);
+      let s = sample || (m.live.preview && !m.live.onAir ? Object.assign({}, m.live, { onAir: true, _pv: true }) : m.live);
+      if (m.id === 'scoreboard' && current.look && current.look.brand) s = Object.assign({}, s, { look: Object.assign({}, s.look, { brand: current.look.brand }) });
       m.view.render(s);
     });
-    el.modeSeg.querySelectorAll('[data-val]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.val === monitorMode)));
+
     el.bgSeg.querySelectorAll('[data-val]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.val === backdrop)));
     paintTag();
   }
@@ -260,12 +267,9 @@
     let mode;
     if (TAG[connKind]) [text, mode] = TAG[connKind];
     else if (sample) { text = `Preview only: ${active.hooks.sampleLabel()}`; mode = 'preview'; }
-    else if (monitorMode === 'preview') { text = 'Preview, not what viewers see'; mode = 'pv'; }
     else {
-      const list = active ? [active] : Object.values(modules);
-      const on = list.filter((m) => m.live && m.live.onAir).length;
-      if (active) { text = on ? 'Live output: on stream' : 'Live output: off screen'; }
-      else { text = on ? `Live output: ${on === 1 ? '1 overlay' : `${on} overlays`} on screen` : 'Live output: nothing on screen'; }
+      const on = onScreenCount();
+      text = `${on ? `${on === 1 ? '1 overlay' : `${on} overlays`} on screen` : 'Nothing on screen'}. Dashed outline = preview only`;
       mode = on ? 'live' : 'off';
     }
     setText(el.monitorText, text);
@@ -289,6 +293,8 @@
       current = { id: st.id || '', name: st.name || '', code: st.code || '', legacy: !!st.legacy, look: st.look || {}, stack: st.stack || [] };
       store.set('hub-streamer', current.id);
       Scoreboard.setCrestBase(`/api/crest/${current.id}`);
+      // The streamer's brand colour, for swatches and the scoreboard's accent
+      document.documentElement.style.setProperty('--brand', current.look.brand || '#e11d48');
       // The preview shows this streamer's overlay look too
       stage.el.dataset.font = current.look.font || 'barlow';
       stage.el.dataset.corners = current.look.corners || 'rounded';
@@ -326,6 +332,11 @@
         if (window.Settings) window.Settings.refresh('people');
       } else if (msg.type === 'session') {
         checkSession();
+      } else if (msg.type === 'obs' && msg.streamer === current.id) {
+        // The "OBS connected" light: green once this streamer's overlay link is open in OBS
+        const pill = document.getElementById('obsPill');
+        pill.dataset.state = msg.count ? 'on' : 'off';
+        document.getElementById('obsText').textContent = msg.count ? (msg.count > 1 ? `OBS connected (${msg.count})` : 'OBS connected') : 'OBS not connected';
       } else if (msg.type === 'media' && msg.streamer === current.id) {
         window.dispatchEvent(new CustomEvent('hub-media', { detail: { list: msg.list || [], playlistMB: msg.playlistMB || 0 } }));
       } else if (msg.type === 'chatAll' && msg.streamer === current.id) {
@@ -367,11 +378,16 @@
     setText(el.streamerName, locked && role !== 'owner' && role !== 'editor' ? 'Overlay hub' : current.name || 'My stream');
     const url = overlayLink(current);
     el.overlayUrl.value = url || 'Unlock the hub to see this streamer’s link';
+    // Editors never see the OBS link, so it can't be copied or passed on
+    const linkRow = el.overlayUrl.parentElement;
+    if (!el.obsOwnerNote) { el.obsOwnerNote = document.createElement('p'); el.obsOwnerNote.className = 'note obs-owner-note'; el.obsOwnerNote.textContent = 'Only the owner can see the OBS link.'; linkRow.after(el.obsOwnerNote); }
+    linkRow.hidden = role === 'editor';
+    el.obsOwnerNote.hidden = role !== 'editor';
     el.openOverlay.href = url || '#';
     el.openOverlay.classList.toggle('is-disabled', !url);
     el.legacyNote.hidden = !current.legacy;
-    const live = Object.values(modules).filter((m) => m.live && m.live.onAir).length;
-    setText(el.liveSummary, live ? `${live === 1 ? '1 overlay' : `${live} overlays`} on screen` : 'Nothing on screen');
+    const live = onScreenCount();
+    setText(el.liveSummary, live ? `${live === 1 ? '1 overlay' : `${live} overlays`} on stream` : 'Nothing on stream');
     el.liveSummary.classList.toggle('is-live', live > 0);
     el.switcherBtn.classList.toggle('has-many', streamerList.length > 1);
     // The list in the switcher
@@ -386,7 +402,7 @@
       b.dataset.id = x.id;
       const dot = document.createElement('i');
       dot.className = `sm-dot${x.live ? ' is-live' : ''}`;
-      dot.title = x.live ? 'Something is on screen' : 'Nothing on screen';
+      dot.title = x.live ? 'Something is on stream' : 'Nothing on stream';
       const name = document.createElement('span');
       name.textContent = x.name;
       b.append(dot, name);
@@ -469,7 +485,7 @@
       const res = await call('POST', '/api/streamers', { name });
       el.streamerAddName.value = '';
       setText(el.streamersError, '');
-      toast(`${res.streamer.name} added. Their overlays start off screen.`);
+      toast(`${res.streamer.name} added. Their overlays start hidden.`);
       link.watch(res.streamer.id);
     } catch (e) { setText(el.streamersError, e.message); }
   }
@@ -560,7 +576,8 @@
   function route(quiet) {
     if (quiet === true && !el.tiles) return;
     const id = location.hash.replace(/^#\/?/, '');
-    const next = modules[id] ? id : 'home';
+    const next = modules[id] && allowedTab(id) ? id : 'home';
+    if (modules[id] && !allowedTab(id) && quiet !== true) toast('You don’t have access to that tab. Ask the owner.');
     const changed = next !== view;
     if (modules[view] && modules[view].hooks.onHide && changed) modules[view].hooks.onHide();
     view = next;
@@ -579,7 +596,7 @@
     if (modules[view]) {
       const m = modules[view];
       // Opening an overlay that's off screen shows it in Preview, so it can be set up before it goes live.
-      if (changed && m.live && !m.live.onAir && monitorMode !== 'preview') setMonitor('preview', true);
+
       if (m.hooks.onShow) m.hooks.onShow();
     }
     if (changed) window.scrollTo(0, 0);
@@ -596,7 +613,7 @@
   const tileName = (t) => (hubSettings.tiles.names && hubSettings.tiles.names[t.id]) || t.name;
   // Auto: on screen first, then overlays you can preview, then ones still to come. Custom: the owner's order.
   function orderedTiles() {
-    const list = TILES.slice();
+    const list = TILES.filter((t) => allowedTab(t.id));
     if (hubSettings.tiles.mode === 'custom' && hubSettings.tiles.order.length) {
       const pos = (t) => { const i = hubSettings.tiles.order.indexOf(t.id); return i < 0 ? 99 : i; };
       return list.sort((a, b) => pos(a) - pos(b));
@@ -622,7 +639,7 @@
         art.innerHTML = `<button class="tile-open" type="button" data-act="open" data-id="${t.id}"><span class="tile-icon">${t.icon}</span><span><span class="tile-name"></span><span class="tile-desc"></span></span><svg class="chev-r" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <div class="tile-preview" data-tile-preview aria-hidden="true"></div>
           <div class="tile-live"><span data-tile-text>Loading…</span><small data-tile-small></small></div>
-          <div class="tile-foot"><span class="tile-state" data-tile-state>Off screen</span>
+          <div class="tile-foot"><span class="tile-state" data-tile-state>Hidden</span>
             <div class="seg seg-sm" role="group" aria-label="${t.name} on stream"><button class="on" type="button" data-act="tile-air" data-id="${t.id}" data-val="1">Show</button><button type="button" data-act="tile-air" data-id="${t.id}" data-val="0">Off</button></div></div>`;
       }
       art.querySelector('.tile-name').textContent = tileName(t);
@@ -648,11 +665,11 @@
     const sb = modules.scoreboard;
     if (sb && sb.live && sb.hooks.tileSummary) {
       const sum = sb.hooks.tileSummary(sb.live);
-      el.miniScore.hidden = false;
+      el.miniScore.hidden = !(sb.live.onAir || sb.live.mode === 'live');
       setText(el.miniText, sum.text);
       setText(el.miniSmall, sum.small || '');
       el.miniScore.querySelector('i').classList.toggle('is-off', !sb.live.onAir);
-      setText(el.qbAir, sb.live.onAir ? 'Off screen' : 'On screen');
+      setText(el.qbAir, sb.live.onAir ? 'Hide' : 'Show');
     }
     Object.values(modules).forEach((m) => {
       const art = el.tiles.querySelector(`[data-tile="${m.id}"]`);
@@ -662,7 +679,7 @@
       if (previews[m.id]) previews[m.id].render(Object.assign({}, m.live, { onAir: true, anims: [] }));
       setText(art.querySelector('[data-tile-small]'), sum.small || '');
       art.classList.toggle('is-on', !!m.live.onAir);
-      setText(art.querySelector('[data-tile-state]'), m.live.onAir ? 'On screen' : 'Off screen');
+      setText(art.querySelector('[data-tile-state]'), (m.hooks.isShowing ? m.hooks.isShowing(m.live) : m.live.onAir) ? 'On stream' : 'Hidden');
       art.querySelectorAll('[data-act="tile-air"]').forEach((b) => {
         b.setAttribute('aria-pressed', String((b.dataset.val === '1') === !!m.live.onAir));
         b.disabled = blocked();
@@ -673,11 +690,10 @@
     const m = modules[id];
     if (!m || !m.live || blocked() || !!m.live.onAir === on) return;
     m.live.onAir = on;
+    if (!on && 'preview' in m.live) m.live.preview = false;
     commit(m, { keepPreview: true });
-    // Once it's on screen, the monitor shows what viewers see.
-    if (on && monitorMode === 'preview') setMonitor('output', true);
     const name = (TILES.find((t) => t.id === id) || {}).name || 'Overlay';
-    toast(on ? `${name} is on screen` : `${name} is off screen`, { tone: on ? 'goal' : 'info' });
+    toast(on ? `${name} is on stream` : `${name} is hidden`, { tone: on ? 'goal' : 'info' });
   }
 
   /* ---------- Toasts and undo ---------- */
@@ -771,7 +787,7 @@
       case 'link-del': call('DELETE', `/api/links/${b.closest('[data-id]').dataset.id}`).catch((err) => setText(el.linkError, err.message)); break;
       case 'link-move': call('PATCH', `/api/links/${b.closest('[data-id]').dataset.id}`, { move: Number(b.dataset.d) }).catch((err) => setText(el.linkError, err.message)); break;
       case 'hide-all':
-        call('POST', `/api/streamers/${current.id}/hide`).then(() => toast('Everything is off screen for this streamer.', { tone: 'info' })).catch((err) => toast(err.message, { tone: 'bad' }));
+        call('POST', `/api/streamers/${current.id}/hide`).then(() => toast('Everything is hidden for this streamer.', { tone: 'info' })).catch((err) => toast(err.message, { tone: 'bad' }));
         break;
       case 'chat-cmd': saveChat({ commands: b.dataset.val === '1' }); break;
       case 'qb-air': if (modules.scoreboard && modules.scoreboard.live) setOnAir('scoreboard', !modules.scoreboard.live.onAir); break;
@@ -853,7 +869,18 @@
   window.addEventListener('resize', measure);
   measure();
 
+  // Every single thing on screen counts: the scoreboard, each Canvas item and the drawing, each Stream Desk widget
+  function onScreenCount() {
+    return Object.values(modules).reduce((n, m) => n + (!m.live ? 0 : m.hooks.liveCount ? m.hooks.liveCount(m.live) : m.live.onAir ? 1 : 0), 0);
+  }
+  function visButtons(v, extra) {
+    const a = extra || '';
+    if (v === 'live') return `<div class="vis is-live"><span class="vis-state"><i></i>On screen</span><button class="btn btn-small" type="button" data-vis="preview"${a}>Back to preview</button><button class="btn btn-small vis-off" type="button" data-vis="off"${a}>Off</button></div>`;
+    if (v === 'preview') return `<div class="vis is-preview"><button class="btn btn-small" type="button" data-vis="off"${a}>Off</button><span class="vis-state">Preview</span><button class="btn vis-go" type="button" data-vis="live"${a}>Show on screen</button></div>`;
+    return `<div class="vis is-off"><button class="btn btn-small vis-pv" type="button" data-vis="preview"${a}>Show preview</button><span class="vis-state is-quiet">Off</span></div>`;
+  }
   window.Hub = {
+    visButtons,
     module, call, toast, remember, undo, route, setOnAir,
     get streamer() { return current; },
     get streamers() { return streamerList; },

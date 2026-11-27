@@ -49,6 +49,7 @@
     </div>
     <div class="top-actions">
       <span class="mini-score" id="miniScore" hidden><i aria-hidden="true"></i><span id="miniText"></span><small id="miniSmall"></small></span>
+      <span class="conn obs-pill" id="obsPill" data-state="off" title="Whether this streamer's overlay link is open in OBS right now"><i aria-hidden="true"></i><span id="obsText">OBS not connected</span></span>
       <span class="conn" id="conn" data-state="connecting" role="status"><i aria-hidden="true"></i><span id="connText">Connecting…</span></span>
       <button class="btn btn-quiet keys-btn" type="button" data-act="keys" aria-label="Keyboard shortcuts">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1M9.5 10h1M13 10h1M16.5 10h1M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -114,16 +115,18 @@
       </div>
 
       <div class="monitor-bar">
-        <div class="seg seg-sm" id="modeSeg" role="group" aria-label="What the preview shows">
-          <button type="button" data-act="monitor" data-val="output">Live output</button>
-          <button type="button" data-act="monitor" data-val="preview">Preview</button>
-        </div>
-        <div class="seg seg-sm" id="bgSeg" role="group" aria-label="Preview background">
-          <button type="button" data-act="bg" data-val="checker" title="See-through">Checker</button>
-          <button type="button" data-act="bg" data-val="dark">Dark</button>
-          <button type="button" data-act="bg" data-val="light">Light</button>
-        </div>
-        <label class="check check-sm"><input type="checkbox" id="safeToggle"><span>Safe area</span></label>
+        <span class="monitor-legend"><i></i>Dashed outline: preview only, not on stream</span>
+        <details class="view-opts">
+          <summary>Background</summary>
+          <div class="view-opts-body">
+            <div class="seg seg-sm" id="bgSeg" role="group" aria-label="Background behind the overlays">
+              <button type="button" data-act="bg" data-val="checker" title="See-through">See-through</button>
+              <button type="button" data-act="bg" data-val="dark">Dark</button>
+              <button type="button" data-act="bg" data-val="light">Light</button>
+            </div>
+            <label class="check check-sm"><input type="checkbox" id="safeToggle"><span>Show the safe edges</span></label>
+          </div>
+        </details>
         <button class="btn btn-small hide-all" type="button" data-act="hide-all" title="Takes every overlay for this streamer off screen">Hide everything</button>
       </div>
 
@@ -201,10 +204,7 @@
         <div class="controls" id="controls">
           <section class="module-bar" aria-label="Scoreboard output and data">
             <div class="module-bar-row">
-              <div class="seg seg-air" role="group" aria-label="Scoreboard on stream">
-                <button class="on" type="button" data-act="air" data-val="1">On screen</button>
-                <button type="button" data-act="air" data-val="0">Off screen</button>
-              </div>
+              <div class="vis-slot" id="sbVis" aria-label="Scoreboard: off, preview or on screen"></div>
               <div class="seg seg-mode" role="group" aria-label="Where the match data comes from">
                 <button class="on" type="button" data-act="mode" data-val="live">Live</button>
                 <button type="button" data-act="mode" data-val="manual">Manual</button>
@@ -330,7 +330,7 @@
             </section>
 
             <section class="panel feed-panel" aria-labelledby="hFeed">
-              <div class="panel-head"><h2 id="hFeed">Follow a match</h2><p>Live from ESPN, free, no key needed</p></div>
+              <div class="panel-head"><h2 id="hFeed">Follow a match</h2><p>Live scores, free</p></div>
               <div class="linked" id="linkedBox">
                 <div class="linked-top">
                   <span class="linked-label">Following</span>
@@ -366,14 +366,14 @@
               <div class="fixtures" id="fixtures" aria-live="polite"></div>
               <div class="feed-settings">
                 <div class="field owner-only">
-                  <span class="field-label" id="pollLabel">Check ESPN every</span>
+                  <span class="field-label" id="pollLabel">Check for updates every</span>
                   <div class="seg" id="pollSeg" role="group" aria-labelledby="pollLabel" aria-describedby="pollNote">
                     <button type="button" data-act="poll" data-secs="3">3 s</button>
                     <button type="button" data-act="poll" data-secs="5">5 s</button>
                     <button type="button" data-act="poll" data-secs="10">10 s</button>
                     <button type="button" data-act="poll" data-secs="30">30 s</button>
                   </div>
-                  <p class="note" id="pollNote">3 s is the fastest. ESPN only holds this data for a second before refreshing it, so goals show within seconds of ESPN having them. Checks run all match, half-time included.</p>
+                  <p class="note" id="pollNote">3 s is the fastest, so goals show within seconds. Checks run all match, half-time included.</p>
                 </div>
                 <label class="check"><input type="checkbox" id="kitToggle"><span>Use the kit colours each team is wearing</span></label>
                 <label class="check owner-only"><input type="checkbox" id="crestToggle"><span>Use the official club crests</span></label>
@@ -394,7 +394,7 @@
                 </div>
                 <div class="strips" id="statCtl"></div>
               </div>
-              <p class="note" id="statsFeedNote" hidden>Stats ESPN sends update by themselves, so their buttons are off. Switch to Manual to change them.</p>
+              <p class="note" id="statsFeedNote" hidden>Stats from Live update by themselves, so their buttons are off. Switch to Manual to change them.</p>
             </section>
           </div>
 
@@ -464,12 +464,12 @@
                 <h3>On the overlay</h3>
                 <div class="item-row wrap"><div class="item-name static"><span>Other scores ticker<small>The rest of today’s games in this competition, along the bottom</small></span></div>
                   <div class="seg seg-sm" role="group" aria-label="Other scores ticker"><button type="button" data-act="show" data-key="ticker" data-val="1">On</button><button type="button" data-act="show" data-key="ticker" data-val="0">Off</button></div></div>
-                <div class="item-row wrap"><div class="item-name static"><span>Substitutions<small>A small flash with who’s on and who’s off, from ESPN</small></span></div>
+                <div class="item-row wrap"><div class="item-name static"><span>Substitutions<small>A small flash with who’s on and who’s off</small></span></div>
                   <div class="seg seg-sm" role="group" aria-label="Substitutions"><button type="button" data-act="show" data-key="subs" data-val="1">On</button><button type="button" data-act="show" data-key="subs" data-val="0">Off</button></div></div>
               </div>
               <div class="ex-group">
                 <h3>Penalty shoot-out</h3>
-                <p class="note">Shows under the scoreboard during penalties. Live fills it in from ESPN; you can also tap each kick.</p>
+                <p class="note">Shows under the scoreboard during penalties. Live fills it in; you can also tap each kick.</p>
                 <div class="kick-grid">
                   <div class="kick-side" data-team="0"><b id="kickHomeName">Home</b><span class="kick-dots" id="kickHome"></span><span class="kick-btns"><button class="btn btn-small" type="button" data-act="kick" data-team="0" data-val="1">Scored</button><button class="btn btn-small" type="button" data-act="kick" data-team="0" data-val="0">Missed</button></span></div>
                   <div class="kick-side" data-team="1"><b id="kickAwayName">Away</b><span class="kick-dots" id="kickAway"></span><span class="kick-btns"><button class="btn btn-small" type="button" data-act="kick" data-team="1" data-val="1">Scored</button><button class="btn btn-small" type="button" data-act="kick" data-team="1" data-val="0">Missed</button></span></div>
@@ -572,7 +572,7 @@
                 </div>
                 <div class="item">
                   <div class="item-row wrap">
-                    <div class="item-name static"><span>Scorers under each team<small>After goals shows them for 15 seconds after each goal</small></span></div>
+                    <div class="item-name static"><span>Scorers under each team<small>Under the scoreboard, on one line</small></span></div>
                     <div class="seg seg-sm" role="group" aria-label="Scorers under each team">
                       <button class="on" type="button" data-act="show" data-key="scorers" data-val="always">Always</button>
                       <button type="button" data-act="show" data-key="scorers" data-val="goals">After goals</button>
@@ -650,7 +650,7 @@
               <div class="look owner-only" role="group" aria-labelledby="hLook">
                 <h3 class="look-title" id="hLook">Look</h3>
                 <div class="look-row">
-                  <span class="look-name">Accent colour<small>The tab, progress line and card header</small></span>
+                  <span class="look-name">Accent colour<small>Brand uses your brand colour from Settings, Overlay look</small></span>
                   <div class="look-ctl">
                     <div class="seg seg-sm" role="group" aria-label="Accent colour">
                       <button type="button" data-act="accent" data-val="comp">Competition</button>
@@ -685,14 +685,11 @@
 
       <div class="view" id="viewCanvas" hidden>
         <section class="module-bar" aria-label="Canvas output">
-          <div class="seg seg-air" role="group" aria-label="Canvas on screen">
-            <button type="button" data-cv="air" data-val="1">On screen</button>
-            <button type="button" data-cv="air" data-val="0">Off screen</button>
-          </div>
-          <p class="note">Draw straight onto the preview. Everything here goes out on the same OBS link.</p>
+          <p class="note">Each thing here has its own buttons: Show preview first, then Show on screen. Drag things around the preview to move them.</p>
         </section>
         <section class="panel cv-panel" aria-label="Draw">
           <h3>Draw</h3>
+          <div class="cv-ink-row" id="cvInk"></div>
           <div class="cv-tools" role="group" aria-label="Tools">
             <button class="btn" type="button" data-cv="tool" data-val="pen" aria-pressed="false">Pen</button>
             <button class="btn" type="button" data-cv="tool" data-val="arrow" aria-pressed="false">Arrow</button>
@@ -753,27 +750,16 @@
 
       <div class="view" id="viewDesk" hidden>
         <section class="module-bar" aria-label="Stream Desk output">
-          <div class="seg seg-air" role="group" aria-label="Stream Desk on screen">
-            <button type="button" data-dk="air" data-val="1">On screen</button>
-            <button type="button" data-dk="air" data-val="0">Off screen</button>
-          </div>
-          <p class="note">Each widget has its own Show switch and place on screen.</p>
-        </section>
-        <section class="panel dk-panel" aria-label="Add a widget">
-          <h3>Add a widget</h3>
-          <div class="ex-cards">
-            <button class="btn" type="button" data-dk="add" data-type="timer">Timer</button>
-            <button class="btn" type="button" data-dk="add" data-type="countdown">Matchday countdown</button>
-            <button class="btn" type="button" data-dk="add" data-type="counter">Counter</button>
-            <button class="btn" type="button" data-dk="add" data-type="text">Text</button>
-            <button class="btn" type="button" data-dk="add" data-type="todo">To-do list</button>
-            <button class="btn" type="button" data-dk="add" data-type="shopping">Shopping list</button>
-            <button class="btn" type="button" data-dk="add" data-type="top">Top list</button>
-            <button class="btn" type="button" data-dk="add" data-type="tier">Tier list</button>
-            <button class="btn" type="button" data-dk="add" data-type="match">My match</button>
-          </div>
+          <p class="note">Open a widget, press Show preview, then Show on screen. Drag widgets around the preview to move them.</p>
         </section>
         <div class="dk-cards" id="dkCards"></div>
+      </div>
+
+      <div class="view" id="viewGames" hidden>
+        <section class="module-bar" aria-label="Chat Games output">
+          <p class="note">Open a game, press Show preview, then Show on screen. Chat plays in your Twitch chat (set the channel in the Chat tab). Drag games around the preview to move them.</p>
+        </section>
+        <div class="dk-cards" id="gmCards"></div>
       </div>
     </section>
   </main>
@@ -781,7 +767,7 @@
 
 <div class="quick-bar" id="quickBar" aria-label="Quick controls">
   <button class="goal-btn" type="button" data-act="goal" data-team="0" id="qbHome" style="--c: var(--home-c, #12a05c)"><span>Goal</span></button>
-  <button class="btn qb-air" type="button" data-act="qb-air" id="qbAir">On screen</button>
+  <button class="btn qb-air" type="button" data-act="qb-air" id="qbAir">On stream</button>
   <button class="goal-btn" type="button" data-act="goal" data-team="1" id="qbAway"><span>Goal</span></button>
 </div>
 
@@ -827,6 +813,7 @@
 <script src="/vendor/qrcode.js"></script>
 <script src="/canvas.js"></script>
 <script src="/desk.js"></script>
+<script src="/games-view.js"></script>
 <script src="/overlays.js"></script>
 <script src="/connect.js"></script>
 <script src="/hub.js"></script>
@@ -834,5 +821,7 @@
 <script src="/scoreboard-control.js"></script>
 <script src="/canvas-control.js"></script>
 <script src="/desk-control.js"></script>
+<script src="/games-control.js"></script>
+<script src="/fold.js"></script>
 </body>
 </html>

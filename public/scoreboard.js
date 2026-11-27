@@ -135,6 +135,7 @@
       root.setProperty(`--${side}`, `rgb(${rgb.join(',')})`);
       root.setProperty(`--${side}-rgb`, rgb.join(','));
       root.setProperty(`--${side}-ink`, lum(rgb) > 0.3 ? '#16090e' : '#ffffff');
+      root.setProperty(`--${side}-edge`, lum(rgb) > 0.55 ? 'rgba(10, 14, 24, .6)' : 'transparent');
       root.setProperty(`--${side}-deep`, `rgb(${deep.join(',')})`);
       root.setProperty(`--${side}-flash-ink`, lum(deep) > 0.18 ? '#16090e' : '#ffffff');
     });
@@ -287,7 +288,7 @@
         el.goalIcon.innerHTML = '';
         setText(el.goalWord, a.name);
         setText(el.goalTeam, a.kind === 'added' ? 'Minutes added' : M.str(current.comp).trim() || 'Live');
-        setText(el.goalDetail, a.kind === 'added' ? '' : codes());
+        setText(el.goalDetail, a.kind === 'added' ? '' : a.name === 'KICK-OFF' ? `${M.codeOf(current.home)} v ${M.codeOf(current.away)}` : codes());
       } else if (a.kind === 'red') {
         el.goal.style.setProperty('--g-1', '#4a0710');
         el.goal.style.setProperty('--g-2', '#d0142a');
@@ -369,8 +370,9 @@
       setText(el.splHomeName, M.titleOf(current, current.home));
       setText(el.splAwayName, M.titleOf(current, current.away));
       setText(el.splScore, `${current.score[0]}–${current.score[1]}`);
-      setText(el.splHomeScorers, M.scorers(current, 0));
-      setText(el.splAwayScorers, M.scorers(current, 1));
+      fitPair(el.splHomeName, el.splAwayName, 46, 28, 360);
+      el.splHomeScorers.innerHTML = scorerHtml(current, 0);
+      el.splAwayScorers.innerHTML = scorerHtml(current, 1);
       splashUntil = Date.now() + 7000;
       el.splash.classList.add('is-on');
       setTimeout(() => { el.splash.classList.remove('is-on'); splashUntil = 0; if (current) render(current); }, 7000);
@@ -567,6 +569,94 @@
       node.classList.add('has-goals');
     }
     const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    // Both team names always the same size: one font size that fits the longer name, used for both,
+    // and on the bar both team cells the same width so the score sits exactly in the middle.
+    function fitPair(a, b, base, min, maxW) {
+      [a, b].forEach((n) => { n.style.fontSize = `${base}px`; n.style.maxWidth = 'none'; });
+      const natural = Math.max(a.scrollWidth, b.scrollWidth, 1);
+      const size = Math.max(min, Math.min(base, Math.floor((base * maxW) / natural)));
+      [a, b].forEach((n) => { n.style.fontSize = `${size}px`; n.style.maxWidth = ''; });
+      return Math.min(maxW, Math.ceil((natural * size) / base));
+    }
+    // Goal scorers: they start a little smaller and shrink together when they don't fit. If there are still too many,
+    // each side shows its scorers a page at a time and swaps every 4 seconds, so every scorer is shown on one slim line.
+    let scKey = '';
+    let scTimer = 0;
+    function fitScorers(s) {
+      const box = el.scorers;
+      const key = JSON.stringify([el.scHome._key, el.scAway._key, s.show.style, box.clientWidth]);
+      if (key === scKey) return;
+      scKey = key;
+      clearInterval(scTimer);
+      const sides = [el.scHome, el.scAway];
+      sides.forEach((side) => { side.querySelectorAll('.sc').forEach((x) => { x.hidden = false; x.dataset.page = '0'; }); side.dataset.pages = '1'; side.dataset.page = '0'; side.classList.remove('is-flip'); });
+      const cs = getComputedStyle(box);
+      const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 12;
+      const used = (side) => (side.classList.contains('has-goals') ? side.scrollWidth : 0);
+      const need = () => used(el.scHome) + used(el.scAway);
+      let k = 0.9;
+      box.style.setProperty('--sc', String(k));
+      while (need() > room && k > 0.76) { k -= 0.05; box.style.setProperty('--sc', k.toFixed(2)); }
+      if (need() <= room) return;
+      // Split each crowded side into pages that fit its share of the room
+      const total = need();
+      sides.forEach((side, i) => {
+        const other = sides[1 - i];
+        const mine = used(side);
+        if (!mine) return;
+        const avail = Math.max(room / 2, room - Math.min(used(other), room / 2));
+        if (mine <= avail || total <= room) return;
+        const ss = getComputedStyle(side);
+        const inner = avail - parseFloat(ss.paddingLeft) - parseFloat(ss.paddingRight);
+        const gap = parseFloat(ss.columnGap) || 0;
+        let page = 0;
+        let width = 0;
+        side.querySelectorAll('.sc').forEach((entry) => {
+          const w = entry.getBoundingClientRect().width;
+          if (width && width + gap + w > inner) { page += 1; width = 0; }
+          width += (width ? gap : 0) + w;
+          entry.dataset.page = String(page);
+        });
+        side.dataset.pages = String(page + 1);
+      });
+      const show = () => sides.forEach((side) => { const p = side.dataset.page; side.querySelectorAll('.sc').forEach((x) => { x.hidden = x.dataset.page !== p; }); });
+      show();
+      if (!sides.some((side) => Number(side.dataset.pages) > 1)) return;
+      scTimer = setInterval(() => {
+        sides.forEach((side) => {
+          const pages = Number(side.dataset.pages);
+          if (pages < 2) return;
+          side.classList.add('is-flip');
+          setTimeout(() => { side.dataset.page = String((Number(side.dataset.page) + 1) % pages); show(); side.classList.remove('is-flip'); }, 230);
+        });
+      }, 4000);
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { scKey = ''; if (current) fitScorers(current); });
+    let fitKey = '';
+    function fitNames(s) {
+      if (!s) return;
+      const long = s.show.names !== 'code';
+      const mini = s.show.style === 'mini';
+      const key = JSON.stringify([el.homeCode.textContent, el.awayCode.textContent, long, s.show.style, el.ctHomeName.textContent, el.ctAwayName.textContent]);
+      if (key === fitKey) return;
+      fitKey = key;
+      if (!long) {
+        [el.homeCell, el.awayCell].forEach((c) => { c.style.width = ''; });
+        [el.homeCode, el.awayCode].forEach((n) => { n.style.fontSize = ''; });
+      } else {
+        const nameW = fitPair(el.homeCode, el.awayCode, mini ? 25 : 34, mini ? 16 : 22, mini ? 150 : 250);
+        const cs = getComputedStyle(el.homeCell);
+        const cellW = Math.ceil(parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + el.homeBadge.offsetWidth + parseFloat(cs.columnGap || cs.gap || 0) + nameW + 4);
+        [el.homeCell, el.awayCell].forEach((c) => { c.style.width = `${cellW}px`; });
+      }
+      // The big stats card and the full-time splash: the same size on both sides too
+      fitPair(el.ctHomeName, el.ctAwayName, 46, 28, 330);
+      fitPair(el.splHomeName, el.splAwayName, 46, 28, 360);
+      placeRedTabs();
+    }
+    // Names are measured again once the fonts have loaded
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { fitKey = ''; fitNames(current); });
+    const scorerHtml = (s, t) => M.scorers(s, t).split(', ').filter(Boolean).map((x) => `<span class="nb">${esc(x)}</span>`).join(', ');
     // The card in the middle of the screen: line-ups, match info, form, head-to-head or the table
     function paintBoard(s) {
       const kind = s.board;
@@ -577,24 +667,21 @@
       const H = s.home;
       const A = s.away;
       const name = (t) => esc(M.titleOf(s, t));
-      const badge = (t, side) => `<span class="mini-badge ${side}" style="background:var(--${side})">${esc(M.initialOf(t))}</span>`;
+      const badge = (t, side) => (t.crestV ? `<span class="mini-badge ${side} has-img"><img src="${crestBase}/${side}?v=${t.crestV}" alt=""></span>` : `<span class="mini-badge ${side}" style="background:var(--${side});color:var(--${side}-ink)">${esc(M.initialOf(t))}</span>`);
       let title = '';
       let sub = '';
       let body = '';
       if (kind === 'lineups') {
         title = 'Line-ups';
-        sub = M.str(s.comp).trim();
         const col = (l, t, side) => `<div class="lu ${side}"><div class="lu-head">${badge(t, side)}<b>${name(t)}</b><span>${esc((l && l.f) || '')}</span></div><ol>${((l && l.xi) || []).map((p) => `<li><i>${esc(p.n)}</i><span>${esc(p.name)}</span><small>${esc(p.pos)}</small></li>`).join('') || '<li class="empty">Not out yet</li>'}</ol></div>`;
         body = `<div class="lu-grid">${col(s.lineups[0], H, 'home')}${col(s.lineups[1], A, 'away')}</div>`;
       } else if (kind === 'info') {
         title = 'Match info';
-        sub = M.str(s.comp).trim();
         const ko = s.kickoffAt ? new Date(s.kickoffAt).toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: s.tz || 'Europe/London' }) : '';
         body = `<div class="info-teams">${badge(H, 'home')}<b>${name(H)}</b><span class="info-v">v</span><b>${name(A)}</b>${badge(A, 'away')}</div>
           <dl class="info-list">${ko ? `<div><dt>Kick-off</dt><dd>${esc(ko)}</dd></div>` : ''}${s.info.venue ? `<div><dt>Ground</dt><dd>${esc(s.info.venue)}${s.info.city ? `, ${esc(s.info.city)}` : ''}</dd></div>` : ''}${s.info.ref ? `<div><dt>Referee</dt><dd>${esc(s.info.ref)}</dd></div>` : ''}</dl>`;
       } else if (kind === 'form') {
         title = 'Form';
-        sub = 'Last five games, most recent on the right';
         const row = (t, side, f) => `<div class="form-row">${badge(t, side)}<b>${name(t)}</b><span class="pills">${(f || '').split('').map((r) => `<i class="r-${r}">${r}</i>`).join('') || '<em>No games yet</em>'}</span></div>`;
         body = row(H, 'home', s.form[0]) + row(A, 'away', s.form[1]);
       } else if (kind === 'h2h') {
@@ -603,7 +690,6 @@
         body = `<ol class="h2h">${s.h2h.games.map((g) => `<li><time>${esc(g.d ? new Date(g.d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '')}</time><b>${esc(g.h)}</b><span class="h2h-score">${g.hs}–${g.as}</span><b>${esc(g.a)}</b></li>`).join('') || '<li class="empty">No recent meetings</li>'}</ol>`;
       } else if (kind === 'table') {
         title = 'Table';
-        sub = M.str(s.comp).trim();
         const rows = s.table;
         let view = rows;
         if (rows.length > 10) {
@@ -612,7 +698,7 @@
           const hi = Math.max(...(marked.length ? marked : [0])) + 3;
           view = hi - lo <= 10 ? rows.slice(Math.max(0, Math.min(lo, rows.length - 10)), Math.max(0, Math.min(lo, rows.length - 10)) + 10) : rows.filter((r, i) => i < 4 || r.t >= 0);
         }
-        body = `<table class="tbl"><thead><tr><th></th><th>Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead><tbody>${view.map((r) => `<tr class="${r.t === 0 ? 'is-home' : r.t === 1 ? 'is-away' : ''}"><td>${r.p}</td><td>${esc(r.n)}</td><td>${r.g}</td><td>${esc(r.gd)}</td><td><b>${r.pts}</b></td></tr>`).join('') || '<tr><td colspan="5">The table isn’t out yet</td></tr>'}</tbody></table>`;
+        body = `<table class="tbl"><thead><tr><th></th><th>Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead><tbody>${view.map((r, i) => `${i && r.p - view[i - 1].p > 1 ? '<tr class="gap"><td colspan="5">…</td></tr>' : ''}<tr class="${r.t === 0 ? 'is-home' : r.t === 1 ? 'is-away' : ''}"><td>${r.p}</td><td>${esc(r.n)}</td><td>${r.g}</td><td>${esc(r.gd)}</td><td><b>${r.pts}</b></td></tr>`).join('') || '<tr><td colspan="5">The table isn’t out yet</td></tr>'}</tbody></table>`;
       }
       const key = JSON.stringify([kind, title, sub, body]);
       if (el.board._key === key) return;
@@ -715,8 +801,10 @@
       if (pens) { paintKicks(el.scHome, s.shoot[0]); paintKicks(el.scAway, s.shoot[1]); } else {
         paintScorerSide(el.scHome, M.scorerList(s, 0));
         paintScorerSide(el.scAway, M.scorerList(s, 1));
+        fitScorers(s);
       }
       el.root.dataset.style = s.show.style;
+      el.root.classList.toggle('is-pv', !!s._pv);
       paintBoard(s);
       paintTicker(s);
       const comp = M.str(s.comp).trim() || 'Live match';
@@ -733,12 +821,13 @@
       const long = s.show.names !== 'code';
       el.homeCell.classList.toggle('is-name', long);
       el.awayCell.classList.toggle('is-name', long);
-      setText(el.dhHome, M.codeOf(s.home));
-      setText(el.dhAway, M.codeOf(s.away));
+      setText(el.dhHome, long ? M.labelOf(s, s.home) : M.codeOf(s.home));
+      setText(el.dhAway, long ? M.labelOf(s, s.away) : M.codeOf(s.away));
       setText(el.ctHomeName, M.titleOf(s, s.home));
       setText(el.ctAwayName, M.titleOf(s, s.away));
-      setText(el.ctHomeScorers, M.scorers(s, 0));
-      setText(el.ctAwayScorers, M.scorers(s, 1));
+      fitNames(s);
+      el.ctHomeScorers.innerHTML = scorerHtml(s, 0);
+      el.ctAwayScorers.innerHTML = scorerHtml(s, 1);
       paintCardReds(el.ctHomeReds, M.redList(s, 0));
       paintCardReds(el.ctAwayReds, M.redList(s, 1));
       paintBadge(el.homeBadge, s.home, 'home');

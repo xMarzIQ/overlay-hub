@@ -146,7 +146,8 @@
       writer: '',
       rev: 0,
       mode: 'manual',          // 'live' follows the feed, 'manual' never changes by itself
-      onAir: false,            // the whole overlay on or off screen; new overlays start off until shown
+      onAir: false,
+      preview: false,          // in the hub's preview, not on stream yet            // the whole overlay on or off screen; new overlays start off until shown
       scale: 1,                // size of the whole overlay
       delay: 0,                // stream delay in seconds: Live updates and the clock wait this long, to match what viewers see
       tz: 'Europe/London',     // time zone for kick-off times
@@ -182,7 +183,7 @@
       auto: { on: false, pre: 'info', ftOff: 10 }, // autopilot
       scenes: [],              // saved setups: { id, name, snap }
       anims: [],               // { id, kind: 'goal' | 'scorer' | 'red', team, name, minute, t }
-      show: { bug: true, drawer: true, card: 'auto', scorers: 'always', names: 'code', yellows: true, timeline: true, banners: true, spotlight: true, splash: true, ticker: false, subs: true, style: 'broadcast' },
+      show: { bug: true, drawer: true, card: 'auto', scorers: 'always', names: 'name', nm: 1, yellows: true, timeline: true, banners: true, spotlight: true, splash: true, ticker: false, subs: true, style: 'broadcast' },
       bug: { x: 64, y: 44, s: 1 },
       card: { x: 960, y: 1016, s: 1 },
       feed: defaultFeed(),
@@ -203,6 +204,7 @@
     s.rev = int(raw.rev, 0, 1e15, 0);
     s.mode = raw.mode === 'live' ? 'live' : 'manual';
     s.onAir = raw.onAir === true;
+    s.preview = raw.preview === true;
     s.scale = num(raw.scale, 0.5, 1.6, 1);
     s.delay = int(raw.delay, 0, 300, 0);
     s.tz = validZone(raw.tz) ? raw.tz : s.tz;
@@ -291,7 +293,9 @@
       drawer: sh.drawer !== false,
       card: ['show', 'auto', 'off'].includes(sh.card) ? sh.card : s.show.card,
       scorers: ['always', 'goals', 'off'].includes(sh.scorers) ? sh.scorers : s.show.scorers,
-      names: ['code', 'name', 'full'].includes(sh.names) ? sh.names : s.show.names,
+      // Names like "Man City" are the default. Older saves move to names once; after that, any choice stays.
+      names: sh.nm === 1 && ['code', 'name', 'full'].includes(sh.names) ? sh.names : sh.names === 'full' ? 'full' : 'name',
+      nm: 1,
       yellows: sh.yellows !== false,
       timeline: sh.timeline !== false,
       banners: sh.banners !== false,
@@ -445,7 +449,7 @@
       const name = raw.replace(/\((og|pen)\)/ig, '').trim();
       let e = out.find((x) => x.name === name);
       if (!e) { e = { name, mins: [] }; out.push(e); }
-      e.mins.push(`${str(g.minute)}${tag ? ` (${tag[1].toLowerCase()})` : ''}`.trim());
+      e.mins.push(`${str(g.minute)}${tag ? ` ${tag[1].toLowerCase()}` : ''}`.trim());
     });
     return out.map((e) => `${e.name} ${e.mins.join(' ')}`.trim()).join(', ');
   }
@@ -480,6 +484,32 @@
     const end = END[s.period];
     return clamp((elapsed(s) - start) / (end - start), 0, 1);
   }
+  // The names clubs are best known by, used when ESPN fills the teams in. Anything typed by hand stays as typed.
+  const KNOWN = {
+    'manchester united': ['Man Utd', 'MUN'], 'man united': ['Man Utd', 'MUN'], 'manchester city': ['Man City', 'MCI'], 'man city': ['Man City', 'MCI'],
+    'tottenham hotspur': ['Spurs', 'TOT'], 'tottenham': ['Spurs', 'TOT'], 'wolverhampton wanderers': ['Wolves', 'WOL'], 'wolverhampton': ['Wolves', 'WOL'],
+    'brighton & hove albion': ['Brighton', 'BHA'], 'brighton and hove albion': ['Brighton', 'BHA'], 'newcastle united': ['Newcastle', 'NEW'],
+    'west ham united': ['West Ham', 'WHU'], 'nottingham forest': ['Forest', 'NFO'], "nott'm forest": ['Forest', 'NFO'], 'crystal palace': ['Palace', 'CRY'],
+    'afc bournemouth': ['Bournemouth', 'BOU'], 'leeds united': ['Leeds', 'LEE'], 'leicester city': ['Leicester', 'LEI'], 'ipswich town': ['Ipswich', 'IPS'],
+    'luton town': ['Luton', 'LUT'], 'sheffield united': ['Sheff Utd', 'SHU'], 'sheffield wednesday': ['Sheff Wed', 'SHW'], 'west bromwich albion': ['West Brom', 'WBA'],
+    'queens park rangers': ['QPR', 'QPR'], 'blackburn rovers': ['Blackburn', 'BLB'], 'bolton wanderers': ['Bolton', 'BOL'], 'birmingham city': ['Birmingham', 'BIR'],
+    'cardiff city': ['Cardiff', 'CAR'], 'coventry city': ['Coventry', 'COV'], 'derby county': ['Derby', 'DER'], 'huddersfield town': ['Huddersfield', 'HUD'],
+    'hull city': ['Hull', 'HUL'], 'middlesbrough': ['Boro', 'MID'], 'norwich city': ['Norwich', 'NOR'], 'plymouth argyle': ['Plymouth', 'PLY'],
+    'preston north end': ['Preston', 'PNE'], 'stoke city': ['Stoke', 'STK'], 'swansea city': ['Swansea', 'SWA'], 'wigan athletic': ['Wigan', 'WIG'],
+    'oxford united': ['Oxford Utd', 'OXF'], 'charlton athletic': ['Charlton', 'CHA'], 'bristol city': ['Bristol City', 'BRC'], 'cambridge united': ['Cambridge Utd', 'CAM'],
+    'paris saint-germain': ['PSG', 'PSG'], 'paris saint germain': ['PSG', 'PSG'], 'bayern munich': ['Bayern', 'BAY'], 'fc bayern münchen': ['Bayern', 'BAY'],
+    'borussia dortmund': ['Dortmund', 'BVB'], 'bayer leverkusen': ['Leverkusen', 'LEV'], 'rb leipzig': ['Leipzig', 'RBL'], 'internazionale': ['Inter', 'INT'],
+    'inter milan': ['Inter', 'INT'], 'ac milan': ['Milan', 'MIL'], 'atletico madrid': ['Atlético', 'ATM'], 'atlético madrid': ['Atlético', 'ATM'],
+    'sporting cp': ['Sporting', 'SCP'], 'manchester utd': ['Man Utd', 'MUN'],
+  };
+  // ESPN's own codes that fans don't use
+  const CODE_FIX = { MNC: 'MCI', MAN: 'MUN' };
+  function knownTeam(full, short, code) {
+    const k = KNOWN[String(full || '').toLowerCase().trim()] || KNOWN[String(short || '').toLowerCase().trim()];
+    const c = String(code || '').toUpperCase();
+    return { name: k ? k[0] : (short || full || ''), code: k ? k[1] : (CODE_FIX[c] || c) };
+  }
+  const knownCode = (c) => CODE_FIX[String(c || '').toUpperCase()] || String(c || '').toUpperCase();
   // "45+2’" -> 47, "63’" -> 63: where something goes on the timeline
   const minuteNum = (m) => { const x = /(\d+)(?:\+(\d+))?/.exec(str(m)); return x ? Number(x[1]) + Number(x[2] || 0) : null; };
   const cardVisible = (s) => s.show.card === 'show' || (s.show.card === 'auto' && ['ht', 'brk', 'ft'].includes(s.period));
@@ -547,7 +577,7 @@
     clamp, pad, str, copy, isHex, isObj, statClean, zeroStats, formatStat,
     syncTime, now, defaults, defaultFeed, normalize,
     inPlay, elapsed, setClock, minuteMark, kickoffLeft, clockView, parseClock, kickoffAtFor,
-    initialOf, codeOf, nameOf, fullOf, labelOf, titleOf, redList, redsOf, minuteNum, scorers, scorerList, accentOf, progressOf, cardVisible, newId, pushAnim, withSample,
+    initialOf, codeOf, nameOf, fullOf, labelOf, titleOf, redList, redsOf, minuteNum, knownTeam, knownCode, scorers, scorerList, accentOf, progressOf, cardVisible, newId, pushAnim, withSample,
     diff, applyPatch,
   };
 }));
