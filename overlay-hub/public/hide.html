@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#120a0d">
+<meta name="robots" content="noindex">
+<title>Hide my overlays</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  /* One job: take this streamer's overlays off screen, fast, from any phone. */
+  :root { color-scheme: dark; --ink: #f6eef1; --ink-2: rgba(246, 238, 241, .7); }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; padding: 24px; background: radial-gradient(120% 90% at 50% 0%, #2a1219, #0d0709 70%); color: var(--ink); font: 500 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { width: min(420px, 100%); display: grid; gap: 18px; text-align: center; }
+  h1 { margin: 0; font: 800 30px/1.1 system-ui, sans-serif; letter-spacing: -.01em; }
+  p { margin: 0; color: var(--ink-2); }
+  button { min-height: 120px; border: 0; border-radius: 28px; color: #fff; font: 800 28px/1 system-ui, sans-serif; cursor: pointer;
+    background: linear-gradient(180deg, #f43f5e, #b0102f); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 0 #6d0a1d, 0 24px 40px -18px rgba(244, 63, 94, .7); -webkit-tap-highlight-color: transparent; transition: transform 100ms ease-out; }
+  button:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 3px 0 #6d0a1d; }
+  button:disabled { opacity: .6; }
+  button:focus-visible { outline: 3px solid #ffd2dc; outline-offset: 4px; }
+  #msg { min-height: 1.5em; font-weight: 600; }
+  #msg.ok { color: #7ee2a8; }
+  #msg.bad { color: #ffb3c1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hide my overlays</h1>
+  <p>One tap takes every overlay off your stream straight away. Whoever runs the hub can put them back.</p>
+  <button type="button" id="hide">Hide everything</button>
+  <p id="msg" role="status"></p>
+</main>
+<script>
+  const code = decodeURIComponent(location.pathname.split('/')[2] || '');
+  const btn = document.getElementById('hide');
+  const msg = document.getElementById('msg');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    msg.className = '';
+    msg.textContent = 'Hiding…';
+    try {
+      const res = await fetch(`/api/hide/${encodeURIComponent(code)}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'That didn’t work. Try again.');
+      msg.className = 'ok';
+      msg.textContent = 'Everything is off screen.';
+    } catch (e) {
+      msg.className = 'bad';
+      msg.textContent = e.message;
+    }
+    btn.disabled = false;
+  });
+</script>
+</body>
+</html>
