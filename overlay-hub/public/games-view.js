@@ -6,7 +6,7 @@
 (() => {
   'use strict';
   const X = window.ExtrasModel;
-  const KEYS = ['poll', 'contexto', 'flags', 'give', 'hunt'];
+  const KEYS = ['poll', 'contexto', 'flags', 'give', 'hunt', 'board'];
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   // Contexto: green when close, yellow when warm, red when far; the bar is longer the closer it is
   const heat = (r) => (r <= 300 ? 'hot' : r <= 1500 ? 'warm' : 'cold');
@@ -25,6 +25,7 @@
     }
     if (k === 'contexto') {
       if (g.winner) return `<div class="gm-title">Contexto</div><div class="gm-win"><small>${esc(g.winner.u)} got it</small><b>${esc(g.winner.w)}</b></div><div class="gm-foot"><span>${g.count} guesses</span></div>`;
+      if (g.revealed && !g.open) return `<div class="gm-title">Contexto</div><div class="gm-win"><small>The word was</small><b>${esc(g.revealed)}</b></div><div class="gm-foot"><span>${g.count} guesses</span></div>`;
       const rows = g.guesses.slice(0, 8).map((x) => `<div class="gm-row cx ${heat(x.r)}"><i style="width:${reach(x.r)}%"></i><span class="gm-t">${esc(x.w)}</span><span class="gm-by">${esc(x.u)}</span><em>${x.r}</em></div>`).join('');
       const last = g.last ? `<div class="gm-last">Latest: <b>${esc(g.last.w)}</b> ${g.last.r} <span>${esc(g.last.u)}</span></div>` : '';
       const ask = mode === 'bang' ? 'Type !g and a word in chat' : 'Type a word in chat';
@@ -41,6 +42,10 @@
       if (g.winner) return `<div class="gm-title">${esc(g.title)}</div><div class="gm-win"><small>Winner</small><b>${esc(g.winner)}</b></div>`;
       return `<div class="gm-title">${esc(g.title)}</div><div class="gv-join">${g.open ? `Type <b>${esc(g.word)}</b> to enter` : 'Entries closed'}</div><div class="gm-foot"><span>${g.entries} entered</span></div>`;
     }
+    if (k === 'board') {
+      const rows = g.list.slice(0, 5).map((x, i) => `<div class="gm-row lb"><b>${i + 1}</b><span class="gm-t">${esc(x.u)}</span><em>${x.pts}</em></div>`).join('');
+      return `<div class="gm-title">${esc(g.title)}</div>${rows || '<div class="gm-empty">No points yet</div>'}<div class="gm-foot"><span>Flag game 1 point, Contexto 3 points</span></div>`;
+    }
     const filled = g.cells.filter((c) => c.t);
     const cells = g.cells.map((c) => `<div class="hn-cell${c.found ? ' is-found' : ''}${c.t ? '' : ' is-empty'}"><span>${esc(c.t)}</span></div>`).join('');
     return `<div class="gm-title">${esc(g.title)}</div><div class="hn-grid" style="--n:${g.size}">${cells}</div><div class="gm-foot"><span>${filled.filter((c) => c.found).length} of ${filled.length} found</span></div>`;
@@ -56,6 +61,7 @@
     function drag(node, key) {
       if (!preview || !opts.onDrag) return;
       node.addEventListener('pointerdown', (e) => {
+        if (node.dataset.lock === '1') return; // locked: stays where it is
         e.preventDefault();
         node.setPointerCapture(e.pointerId);
         const k = 1920 / root.getBoundingClientRect().width;
@@ -63,8 +69,8 @@
         const from = [parseFloat(node.style.left), parseFloat(node.style.top)];
         let to = from;
         node.classList.add('is-dragging');
-        const move = (ev) => { to = [Math.round(from[0] + (ev.clientX - start[0]) * k), Math.round(from[1] + (ev.clientY - start[1]) * k)]; node.style.left = `${to[0]}px`; node.style.top = `${to[1]}px`; };
-        const up = () => { node.removeEventListener('pointermove', move); node.classList.remove('is-dragging'); if (to !== from) opts.onDrag(key, Math.max(0, Math.min(1920, to[0])), Math.max(0, Math.min(1080, to[1]))); };
+        const move = (ev) => { to = [Math.round(from[0] + (ev.clientX - start[0]) * k), Math.round(from[1] + (ev.clientY - start[1]) * k)]; if (Math.abs(to[0] - 960) < 16) to[0] = 960; if (Math.abs(to[1] - 540) < 16) to[1] = 540; root.classList.toggle('guide-x', to[0] === 960); root.classList.toggle('guide-y', to[1] === 540); node.style.left = `${to[0]}px`; node.style.top = `${to[1]}px`; };
+        const up = () => { node.removeEventListener('pointermove', move); root.classList.remove('guide-x', 'guide-y'); node.classList.remove('is-dragging'); if (to !== from) opts.onDrag(key, Math.max(0, Math.min(1920, to[0])), Math.max(0, Math.min(1080, to[1]))); };
         node.addEventListener('pointermove', move);
         node.addEventListener('pointerup', up, { once: true });
         node.addEventListener('pointercancel', up, { once: true });
@@ -85,6 +91,7 @@
         const html = inner(k, g, s.mode);
         if (node._html !== html) { node._html = html; node.innerHTML = html; }
         if (!node.classList.contains('is-dragging')) { node.style.left = `${g.x}px`; node.style.top = `${g.y}px`; }
+        node.dataset.lock = g.lock ? '1' : '';
         node.style.setProperty('--c', g.color);
         node.style.transform = `translate(-50%, -50%) scale(${g.scale})`;
         node.classList.toggle('is-on', X.shows(g.vis, preview));

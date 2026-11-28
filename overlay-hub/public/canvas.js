@@ -35,12 +35,45 @@
     const liveG = root.querySelector('.cv-live');
     const spot = root.querySelector('.cv-spot');
     const laser = root.querySelector('.cv-laser');
+    const trail = Array.from({ length: 9 }, () => { const t = document.createElement('i'); t.className = 'cv-trail'; root.appendChild(t); return t; });
+    let trailPts = [];
+    let trailT = 0;
+    // The tactics pitch with its player counters (draggable in the hub's preview)
+    function paintPitch(d, it) {
+      const key = JSON.stringify(it.men);
+      if (d._men === key && d.firstChild) return;
+      d._men = key;
+      const men = it.men.map((m, i) => `<g class="cv-man t${m.t}" data-i="${i}" transform="translate(${m.x} ${m.y})"><circle r="2.6"></circle><text y="0.95" text-anchor="middle">${String(m.n).replace(/[<&]/g, '')}</text></g>`).join('');
+      d.innerHTML = PITCH.replace('</svg>', `${men}</svg>`);
+    }
+    if (preview && opts.onDrag) {
+      root.addEventListener('pointerdown', (e) => {
+        const man = e.target.closest && e.target.closest('.cv-man');
+        if (!man) return;
+        e.stopPropagation(); e.preventDefault();
+        const item = man.closest('.cv-item');
+        const svg = man.ownerSVGElement;
+        const i = Number(man.dataset.i);
+        const at = (ev) => { const r = svg.getBoundingClientRect(); return [Math.max(0, Math.min(105, ((ev.clientX - r.left) / r.width) * 105)), Math.max(0, Math.min(68, ((ev.clientY - r.top) / r.height) * 68))]; };
+        let pos = null;
+        const move = (ev) => { pos = at(ev); man.setAttribute('transform', `translate(${pos[0]} ${pos[1]})`); };
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); if (pos) opts.onDrag(`man:${item.dataset.id}:${i}`, Math.round(pos[0] * 10) / 10, Math.round(pos[1] * 10) / 10); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+      }, true);
+    }
     const audio = preview ? null : new Audio();
     let current = null;
     let musicKey = '';
     const marker = `url(#cvArrow${preview ? 'P' : ''})`;
 
-    const pathOf = (pts) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]} ${p[1]}`).join('');
+    const pathOf = (pts) => {
+      if (pts.length < 3) return pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]} ${p[1]}`).join('');
+      let d = `M${pts[0][0]} ${pts[0][1]}`;
+      for (let i = 1; i < pts.length - 1; i += 1) d += `Q${pts[i][0]} ${pts[i][1]} ${(pts[i][0] + pts[i + 1][0]) / 2} ${(pts[i][1] + pts[i + 1][1]) / 2}`;
+      const l = pts[pts.length - 1];
+      return `${d}L${l[0]} ${l[1]}`;
+    };
     const NS = 'http://www.w3.org/2000/svg';
     function strokeEl(st) {
       const g = document.createElementNS(NS, 'g');
@@ -80,7 +113,7 @@
       else if (it.type === 'youtube') { const v = ytId(it.src); d.innerHTML = v ? `<iframe src="https://www.youtube.com/embed/${v}?autoplay=1&controls=0&rel=0${preview ? '&mute=1' : ''}" title="" allow="autoplay; encrypted-media" loading="lazy"></iframe>` : ''; }
       else if (it.type === 'text') { d.style.color = it.color; d.textContent = it.text; }
       else if (it.type === 'qr') d.innerHTML = `${qrSvg(it.src)}${it.text ? `<span>${esc(it.text)}</span>` : ''}`;
-      else if (it.type === 'pitch') d.innerHTML = PITCH;
+      else if (it.type === 'pitch') paintPitch(d, it);
       return d;
     }
     // Where an item sits: x and y are its centre in the 1920×1080 stream
@@ -89,12 +122,14 @@
       d.style.top = `${it.y}px`;
       d.style.transform = `translate(-50%, -50%) scale(${it.scale})`;
       d.style.zIndex = String(it.z);
+      d.dataset.lock = it.lock ? '1' : '';
     }
     // In the hub, anything can be dragged around the preview
     function draggable(node, idOf) {
       if (!preview || !opts.onDrag) return;
       node.addEventListener('pointerdown', (e) => {
         if (document.querySelector('.draw-layer:not([hidden])')) return; // a drawing tool is in use
+        if (node.dataset.lock === '1') return; // locked: stays where it is
         e.preventDefault();
         node.setPointerCapture(e.pointerId);
         const box = root.getBoundingClientRect();
@@ -103,8 +138,8 @@
         const from = [parseFloat(node.style.left), parseFloat(node.style.top)];
         let to = from;
         node.classList.add('is-dragging');
-        const move = (ev) => { to = [Math.round(from[0] + (ev.clientX - start[0]) * k), Math.round(from[1] + (ev.clientY - start[1]) * k)]; node.style.left = `${to[0]}px`; node.style.top = `${to[1]}px`; };
-        const up = () => { node.removeEventListener('pointermove', move); node.classList.remove('is-dragging'); if (to !== from) opts.onDrag(idOf(), Math.max(0, Math.min(1920, to[0])), Math.max(0, Math.min(1080, to[1]))); };
+        const move = (ev) => { to = [Math.round(from[0] + (ev.clientX - start[0]) * k), Math.round(from[1] + (ev.clientY - start[1]) * k)]; if (Math.abs(to[0] - 960) < 16) to[0] = 960; if (Math.abs(to[1] - 540) < 16) to[1] = 540; root.classList.toggle('guide-x', to[0] === 960); root.classList.toggle('guide-y', to[1] === 540); node.style.left = `${to[0]}px`; node.style.top = `${to[1]}px`; };
+        const up = () => { node.removeEventListener('pointermove', move); root.classList.remove('guide-x', 'guide-y'); node.classList.remove('is-dragging'); if (to !== from) opts.onDrag(idOf(), Math.max(0, Math.min(1920, to[0])), Math.max(0, Math.min(1080, to[1]))); };
         node.addEventListener('pointermove', move);
         node.addEventListener('pointerup', up, { once: true });
         node.addEventListener('pointercancel', up, { once: true });
@@ -114,13 +149,13 @@
       current = s;
       const now = Date.now();
       // Items: rebuilt only when what's inside them changes, so videos and web pages don't reload on every update
-      const key = JSON.stringify(s.items.map((it) => [it.id, it.type, it.src, it.text, it.color]));
+      const key = JSON.stringify(s.items.map((it) => [it.id, it.type, it.src, it.text, it.color, it.type === 'pitch' ? it.men : 0]));
       if (items._key !== key) {
         items._key = key;
         const old = new Map(Array.from(items.children).map((c) => [c.dataset.key, c]));
         const frag = document.createDocumentFragment();
         s.items.forEach((it) => {
-          const k = JSON.stringify([it.id, it.type, it.src, it.text, it.color]);
+          const k = JSON.stringify([it.id, it.type, it.src, it.text, it.color, it.type === 'pitch' ? it.men : 0]);
           let node = old.get(k);
           if (!node) { node = itemEl(it); draggable(node, () => node.dataset.id); }
           node.dataset.key = k;
@@ -173,7 +208,16 @@
       render,
       // The stroke being drawn right now, before it's finished (the hub's preview only)
       drawing(st) { liveG.replaceChildren(...(st ? [strokeEl(st)] : [])); },
-      laser(on, x, y) { laser.classList.toggle('is-on', !!on); laser.style.transform = `translate(${x}px, ${y}px)`; },
+      laser(on, x, y) {
+        laser.classList.toggle('is-on', !!on);
+        laser.style.transform = `translate(${x}px, ${y}px)`;
+        if (!on) { trailPts = []; trail.forEach((t) => { t.style.opacity = '0'; }); return; }
+        trailPts.unshift([x, y]);
+        trailPts = trailPts.slice(0, trail.length);
+        trail.forEach((t, i) => { const p = trailPts[i]; if (!p) { t.style.opacity = '0'; return; } const k = 1 - i / trail.length; t.style.transform = `translate(${p[0]}px, ${p[1]}px) scale(${0.35 + 0.65 * k})`; t.style.opacity = String(0.6 * k); });
+        clearTimeout(trailT);
+        trailT = setTimeout(() => { trailPts = []; trail.forEach((t) => { t.style.opacity = '0'; }); }, 260);
+      },
     };
   }
   window.CanvasOverlay = { mount };

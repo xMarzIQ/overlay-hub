@@ -45,7 +45,7 @@
     onDrag,
     onState(s, before, first) {
       live = s;
-      if (first) { loadFixtures(false); }
+      if (first) { loadFixtures(false); clearIfOld(); }
       else if (before && before !== s) announce(before, s);
       if (previewKey && previewKey !== 'test' && previewKey !== 'practice') {
         const keep = previewState ? { clock: previewState.clock, kickoffAt: previewState.kickoffAt } : null;
@@ -83,6 +83,7 @@
 
   /* ---------- The hub tile ---------- */
   function tileSummary(s) {
+    if (s.home.name === 'Home' && s.away.name === 'Away' && !s.feed.fixtureId) return { text: 'No match yet', small: '' };
     const text = `${M.codeOf(s.home)} ${s.score[0]}–${s.score[1]} ${M.codeOf(s.away)}`;
     let small;
     if (M.inPlay(s)) small = M.minuteMark(s) || 'Live';
@@ -220,8 +221,11 @@
     commit({ keepPreview: true });
   });
   function syncExtras() {
-    const pops = ['banners', 'spotlight', 'splash', 'subs'].every((k) => live.show[k]);
-    document.querySelectorAll('[data-act="popups"]').forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.val === '1') === pops)));
+    const FLASHES = ['goalFlash', 'redFlash', 'varFlash', 'addedBoard', 'banners', 'spotlight', 'splash', 'subs'];
+    document.querySelectorAll('[data-act="flash"]').forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.val === '1') === !!live.show[x.dataset.key])));
+    const allOn = FLASHES.every((k) => live.show[k]);
+    const allOff = FLASHES.every((k) => !live.show[k]);
+    document.querySelectorAll('[data-act="popups"]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.val === '1' ? allOn : allOff)));
     document.querySelectorAll('[data-act="card-now"]').forEach((x) => x.setAttribute('aria-pressed', String(live.show.card === 'show')));
     const pens = document.querySelector('[data-fold="sb-pens"]');
     if (pens) pens.hidden = !(live.period === 'pens' || (live.period === 'ft' && live.note === 'pens'));
@@ -805,6 +809,20 @@
     fn();
     done();
   }
+  // A match that kicked off more than 12 hours ago and isn't on screen is cleared when the hub opens
+  // (with Undo), so yesterday's game isn't waiting there. Follow my team loads the next match by itself instead.
+  function clearIfOld() {
+    if (!live || live.onAir || !live.kickoffAt || Date.now() - live.kickoffAt < 12 * 3600 * 1000) return;
+    if (live.follow && live.follow.team) return;
+    const was = `${M.nameOf(live.home)} v ${M.nameOf(live.away)}`;
+    undoable(`${was} was an old match, so the scoreboard was cleared. Pick today’s match in Find a match.`, () => {
+      const d = M.defaults();
+      ['home', 'away', 'comp', 'compLogo', 'kickoff', 'kickoffAt', 'period', 'note', 'added', 'score', 'pens', 'stats', 'goals', 'reds', 'anims', 'shoot'].forEach((k) => { if (k in d) live[k] = M.copy(d[k]); });
+      M.setClock(live, 0, false);
+      live.feed = Object.assign({}, live.feed, { fixtureId: 0, compKey: '', title: '', status: '', statusShort: '', done: false });
+      commit();
+    });
+  }
   function newMatch() {
     undoable('New match started.', () => {
       M.setClock(live, 0, false);
@@ -1058,7 +1076,8 @@
     if (act === 'test-anims') { testAnimations(); return; }
     if (act === 'practice') { practice(); return; }
     if (['board', 'kick', 'kick-undo', 'kick-clear', 'auto', 'scene-apply', 'scene-del', 'follow-save', 'follow-clear'].includes(act) && live) { extras(act, b); return; }
-    if (act === 'popups' && live) { ['banners', 'spotlight', 'splash', 'subs'].forEach((k) => { live.show[k] = b.dataset.val === '1'; }); commit({ keepPreview: true }); return; }
+    if (act === 'popups' && live) { ['goalFlash', 'redFlash', 'varFlash', 'addedBoard', 'banners', 'spotlight', 'splash', 'subs'].forEach((k) => { live.show[k] = b.dataset.val === '1'; }); commit({ keepPreview: true }); return; }
+    if (act === 'flash' && live) { live.show[b.dataset.key] = b.dataset.val === '1'; commit({ keepPreview: true }); return; }
     if (act === 'card-now' && live) { live.show.card = live.show.card === 'show' ? 'auto' : 'show'; live.board = 'none'; commit({ keepPreview: true }); return; }
     if (act === 'copy-result') { if (live) copyResult(); return; }
     if (act === 'tab') { setTab(b.dataset.tab); return; }

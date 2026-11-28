@@ -1,0 +1,3 @@
+Barlow, Barlow Condensed, Barlow Semi Condensed (Jeremy Tribby), Oswald (Vernon Adams and contributors) and Saira Condensed (Omnibus-Type)
+are licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
+They are bundled here unchanged so the overlay never depends on an outside font service.

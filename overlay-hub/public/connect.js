@@ -3,6 +3,7 @@
   the server's time, and for the hub the list of streamers. It reconnects by itself.
   An overlay page reloads itself when the server has been updated, so OBS never runs old code.
 */
+const installId = () => { try { let v = localStorage.getItem('hub-install'); if (!v) { v = Math.random().toString(36).slice(2, 14); localStorage.setItem('hub-install', v); } return v; } catch (e) { return ''; } };
 (() => {
   'use strict';
   const M = window.Match;
@@ -28,7 +29,7 @@
       ws = new WebSocket(url());
       ws.onopen = () => {
         attempt = 0;
-        if (key !== null) raw({ type: 'auth', token: key });
+        if (key !== null) raw({ type: 'auth', token: key, install: installId() });
         status('live');
         if (h.onOpen) h.onOpen();
       };
@@ -75,7 +76,7 @@
       ws.onclose = () => {
         status('reconnecting');
         attempt += 1;
-        timer = setTimeout(open, Math.min(10000, 400 * 2 ** Math.min(attempt, 5)));
+        timer = setTimeout(open, Math.min(10000, 400 * 2 ** Math.min(attempt, 5)) * (0.8 + Math.random() * 0.4)); // a little random, so many devices don't all reconnect at once
       };
       ws.onerror = () => { try { ws.close(); } catch (e) { /* already closed */ } };
     }
@@ -87,7 +88,7 @@
     open();
     return {
       send: raw,
-      auth(t) { key = t || ''; raw({ type: 'auth', token: key }); },
+      auth(t) { key = t || ''; raw({ type: 'auth', token: key, install: installId() }); },
       send(m) { raw(m); },
       watch(id) { streamer = id; raw({ type: 'watch', streamer: id }); },
       get streamer() { return streamer; },

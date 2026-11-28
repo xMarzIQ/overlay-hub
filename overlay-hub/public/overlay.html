@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Overlay</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700&family=Oswald:wght@500;600;700&family=Saira+Condensed:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="/fonts/fonts.css">
 <link rel="stylesheet" href="/scoreboard.css">
 <link rel="stylesheet" href="/extras.css">
 <style>
@@ -27,6 +25,10 @@
 <script src="/canvas.js"></script>
 <script src="/desk.js"></script>
 <script src="/games-view.js"></script>
+<script src="/challenges-view.js"></script>
+<script src="/media-view.js"></script>
+<script src="/subathon-view.js"></script>
+<script src="/twitch-view.js"></script>
 <script src="/overlays.js"></script>
 <script src="/connect.js"></script>
 <script>
@@ -35,12 +37,19 @@
   const code = decodeURIComponent((location.pathname.split('/')[2] || '').trim());
   const stage = Stage.create(document.getElementById('viewport'));
   const shown = {};
-  Object.entries(OverlayRegistry).forEach(([id, o]) => { shown[id] = { o, view: o.mount(stage) }; });
+  Object.entries(OverlayRegistry).forEach(([id, o]) => { shown[id] = { o, view: o.mount(stage, { send: (m) => link && link.send(m) }) }; });
   let brand = '';
   // The streamer's brand colour is the scoreboard's accent when it's set to Brand
   const draw = (id, state) => { const m = shown[id]; if (!m) return; const n = m.o.normalize(state); if (id === 'scoreboard' && brand) n.look = Object.assign({}, n.look, { brand }); m.view.render(n); };
-  Live.connect({
-    onMessage: (msg) => { if (msg.type === 'laser' && shown.canvas && shown.canvas.view.laser) shown.canvas.view.laser(msg.on, msg.x, msg.y); },
+  // Tells the hub each change has been drawn here, so it can show "applied"
+  const lastAck = {};
+  const ack = (id, state) => { const ts = state && state.ts; if (!ts || lastAck[id] === ts || !link) return; lastAck[id] = ts; link.send({ type: 'applied', module: id, ts }); };
+  const link = Live.connect({
+    onMessage: (msg) => {
+      if (msg.type === 'laser' && shown.canvas && shown.canvas.view.laser) shown.canvas.view.laser(msg.on, msg.x, msg.y);
+      // Hide everything is an emergency: everything goes at once, with no exit animation
+      if (msg.type === 'instant') { document.documentElement.classList.add('instant'); setTimeout(() => document.documentElement.classList.remove('instant'), msg.ms || 1500); }
+    },
     onHello: (msg) => {
       document.body.classList.remove('is-gone');
       if (msg.streamer) {
@@ -56,7 +65,7 @@
       }
       Object.entries(msg.modules || {}).forEach(([id, state]) => draw(id, state));
     },
-    onState: draw,
+    onState: (id, state) => { draw(id, state); ack(id, state); },
     onGone: () => document.body.classList.add('is-gone'), // the link was reset or the streamer removed
   }, { role: 'overlay', code });
 </script>

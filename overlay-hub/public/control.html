@@ -3,12 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#1d1612">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Overlay Hub">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#0b0a0c">
 <title>Overlay hub</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700&family=Oswald:wght@500;600;700&family=Saira+Condensed:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="/fonts/fonts.css">
 <link rel="stylesheet" href="/scoreboard.css">
 <link rel="stylesheet" href="/extras.css">
 <link rel="stylesheet" href="/hub.css">
@@ -49,6 +53,7 @@
     </div>
     <div class="top-actions">
       <span class="mini-score" id="miniScore" hidden><i aria-hidden="true"></i><span id="miniText"></span><small id="miniSmall"></small></span>
+      <button class="btn btn-quiet status-btn" type="button" data-act="status" id="statusBtn" title="Status and go-live check"><i class="status-dot" id="statusDot" data-state="ok"></i><span>Status</span></button>
       <span class="conn obs-pill" id="obsPill" data-state="off" title="Whether this streamer's overlay link is open in OBS right now"><i aria-hidden="true"></i><span id="obsText">OBS not connected</span></span>
       <span class="conn" id="conn" data-state="connecting" role="status"><i aria-hidden="true"></i><span id="connText">Connecting…</span></span>
       <button class="btn btn-quiet keys-btn" type="button" data-act="keys" aria-label="Keyboard shortcuts">
@@ -117,16 +122,21 @@
       <div class="monitor-bar">
         <span class="monitor-legend"><i></i>Dashed outline: preview only, not on stream</span>
         <details class="view-opts">
-          <summary>Background</summary>
+          <summary>Preview background</summary>
           <div class="view-opts-body">
             <div class="seg seg-sm" id="bgSeg" role="group" aria-label="Background behind the overlays">
               <button type="button" data-act="bg" data-val="checker" title="See-through">See-through</button>
               <button type="button" data-act="bg" data-val="dark">Dark</button>
               <button type="button" data-act="bg" data-val="light">Light</button>
+              <button type="button" data-act="bg" data-val="picture" title="A screenshot of your stream behind the overlays. It stays on this device.">Your picture</button>
             </div>
             <label class="check check-sm"><input type="checkbox" id="safeToggle"><span>Show the safe edges</span></label>
+            <input type="file" id="bgPicture" accept="image/*" hidden>
+            <button type="button" class="btn btn-quiet btn-small" data-act="bg-picture-change">Choose a different picture</button>
           </div>
         </details>
+        <button class="btn btn-small" type="button" data-act="fullscreen" title="Fill the whole screen with the preview (Esc to leave)">Full screen</button>
+        <button class="btn btn-small restore-all" type="button" data-act="restore-all" hidden title="Puts back exactly what was on screen before Hide everything">Restore</button>
         <button class="btn btn-small hide-all" type="button" data-act="hide-all" title="Takes every overlay for this streamer off screen">Hide everything</button>
       </div>
 
@@ -146,6 +156,7 @@
       <div class="box" id="box">
         <div class="box-tabs" role="tablist" aria-label="Links and activity">
           <button type="button" role="tab" data-act="box" data-tab="obs" aria-selected="true">OBS link</button>
+          <button type="button" role="tab" data-act="box" data-tab="setups" aria-selected="false">Setups</button>
           <button type="button" role="tab" data-act="box" data-tab="links" aria-selected="false" class="owner-only">Links</button>
           <button type="button" role="tab" data-act="box" data-tab="activity" aria-selected="false" class="owner-only">Activity</button>
           <button type="button" role="tab" data-act="box" data-tab="chat" aria-selected="false" class="owner-only">Chat</button>
@@ -158,6 +169,11 @@
           </div>
           <p class="note" id="legacyNote" hidden>Your old /overlay link still shows this streamer too, until you reset the link in Manage streamers.</p>
         </div>
+        <div class="box-panel" data-panel="setups" hidden>
+          <p class="note">A setup remembers what’s on screen in every tab. Show puts exactly that on screen and takes everything else off.</p>
+          <div class="setup-save"><input class="input" id="setupName" maxlength="30" placeholder="Name it, like Starting soon" aria-label="Setup name"><button class="btn btn-primary" type="button" data-act="setup-save">Save what’s on screen</button></div>
+          <div class="setup-list" id="setupList"></div>
+        </div>
         <div class="box-panel owner-only" data-panel="links" hidden>
           <div class="links" id="linksList"></div>
           <form class="link-add" id="linkAdd">
@@ -168,6 +184,7 @@
           <p class="field-error" id="linkError" role="status"></p>
         </div>
         <div class="box-panel owner-only" data-panel="activity" hidden>
+          <label class="activity-filter">Show <select class="select" id="activityWho" aria-label="Whose changes to show"><option value="">Everyone</option></select></label>
           <ol class="activity" id="activityList"></ol>
         </div>
         <div class="box-panel owner-only" data-panel="chat" hidden>
@@ -196,7 +213,9 @@
           <h2>Your overlays</h2>
           <p>Open one to set it up, check it in Preview, then put it on screen.</p>
         </div>
+        <section class="qa-bar owner-only" id="qaBar" hidden aria-label="Quick actions"></section>
         <div class="tiles" id="tiles"></div>
+        <div class="owner-only" id="toolsBox"></div>
       </div>
 
       <!-- Live scoreboard -->
@@ -254,11 +273,13 @@
                     <span class="delay-hint">How far your stream runs behind the real match. The clock and Live updates wait this long.</span>
                   </div>
                   <div class="delay-ctl">
+                    <button class="btn btn-sq" type="button" data-act="delay" data-d="-10" aria-label="10 seconds less delay">−10</button>
                     <button class="btn btn-sq" type="button" data-act="delay" data-d="-5" aria-label="5 seconds less delay">−5</button>
                     <button class="btn btn-sq" type="button" data-act="delay" data-d="-1" aria-label="1 second less delay">−1</button>
                     <output id="delayOut" aria-live="polite">0 s</output>
                     <button class="btn btn-sq" type="button" data-act="delay" data-d="1" aria-label="1 second more delay">+1</button>
                     <button class="btn btn-sq" type="button" data-act="delay" data-d="5" aria-label="5 seconds more delay">+5</button>
+                    <button class="btn btn-sq" type="button" data-act="delay" data-d="10" aria-label="10 seconds more delay">+10</button>
                     <button class="btn btn-quiet btn-small" type="button" data-act="delay-reset" id="delayReset">No delay</button>
                   </div>
                 </div>
@@ -729,7 +750,8 @@
           </form>
           <p class="field-error" id="cvUploadMsg" role="status"></p>
           <div class="cv-lib" id="cvLib"></div>
-          <div class="cv-music" id="cvMusic">
+          <p class="note cv-moved">Music, playlists and sounds have moved to <a href="#media">Media Centre</a>.</p>
+          <div class="cv-music" id="cvMusic" hidden>
             <h4>Music</h4>
             <div class="ex-cards">
               <button class="btn" type="button" data-cv="music" data-val="play">Play</button>
@@ -753,6 +775,37 @@
           <p class="note">Open a widget, press Show preview, then Show on screen. Drag widgets around the preview to move them.</p>
         </section>
         <div class="dk-cards" id="dkCards"></div>
+        <div class="dk-cards ro-box" id="roCards"></div>
+      </div>
+
+      <div class="view" id="viewTwitch" hidden>
+        <section class="module-bar" aria-label="Twitch Centre">
+          <p class="note">Everything for the Twitch channel, using the connection set up in Settings, Twitch. Alerts, timed messages and commands all start Off.</p>
+        </section>
+        <div class="dk-cards" id="twCards"></div>
+      </div>
+
+      <div class="view" id="viewSubathon" hidden>
+        <section class="module-bar" aria-label="Subathon and goals">
+          <p class="note">A subathon timer, goals, milestones and wheel spins. Twitch contributions count by themselves once Twitch is connected; anything can also be added by hand. Nothing shows on stream until you press Show.</p>
+        </section>
+        <div class="dk-cards" id="sbCards"></div>
+      </div>
+
+      <div class="view" id="viewMedia" hidden>
+        <section class="module-bar" aria-label="Media Centre">
+          <p class="note">Music, sounds, slideshows, sponsors and GIFs, all from the same uploaded files. Nothing plays or shows until you press it. In OBS, tick “Control audio via OBS” on the Browser source to hear music and sounds.</p>
+        </section>
+        <div class="dk-cards" id="mdCards"></div>
+      </div>
+
+      <div class="view" id="viewChallenges" hidden>
+        <section class="module-bar ch-bar-top" aria-label="Add a challenge">
+          <div class="ch-addbar"><select class="select" id="chKind" aria-label="Kind of challenge"><option value="bingo">Bingo / scavenger hunt</option><option value="wheel">Random wheel</option><option value="tracker">Challenge tracker</option><option value="checklist">Checklist</option><option value="counter">Counter</option><option value="versus">Versus</option><option value="budget">Budget challenge</option><option value="lives">Lives</option><option value="timer">Challenge timer</option><option value="forfeits">Forfeits</option><option value="mystery">Mystery challenges</option><option value="race">Challenge race</option><option value="milestones">Milestones</option><option value="generator">Random challenge</option><option value="teams">Team generator</option><option value="leaderboard">Leaderboard</option></select><button class="btn btn-primary" type="button" data-ch="add">Add</button></div>
+          <p class="note">Add as many as you like. Each one starts Off: open it, press Show preview, then Show on screen. Drag them around the preview to move them.</p>
+        </section>
+        <div class="dk-cards" id="chCards"></div>
+        <section class="ch-lib-box" aria-label="Saved challenges"><h3>Library</h3><p class="note">Save a grid, wheel or list from its dropdown to use it again later.</p><div class="setup-list" id="chLib"></div></section>
       </div>
 
       <div class="view" id="viewGames" hidden>
@@ -806,6 +859,17 @@
   <p class="note">Shortcuts work when you’re not typing in a box. The scoreboard ones work on its page.</p>
 </dialog>
 
+<!-- Phones: the things you need mid-stream, always at the bottom of the screen -->
+<nav class="phone-bar" aria-label="Quick controls">
+  <button type="button" data-act="hide-all" class="pb-hide">Hide everything</button>
+  <button type="button" data-act="restore-all" class="pb-restore" hidden>Restore</button>
+  <button type="button" data-act="undo-last">Undo</button>
+  <button type="button" data-act="status">Status</button>
+</nav>
+<dialog class="keys-dialog status-dialog" id="statusDialog" aria-label="Status and go-live check">
+  <div class="status-head"><h3>Status and go-live check</h3><button class="btn btn-quiet btn-small" type="button" data-act="status-close">Done</button></div>
+  <div id="statusBody"></div>
+</dialog>
 <script src="/match.js"></script>
 <script src="/stage.js"></script>
 <script src="/scoreboard.js"></script>
@@ -814,6 +878,10 @@
 <script src="/canvas.js"></script>
 <script src="/desk.js"></script>
 <script src="/games-view.js"></script>
+<script src="/challenges-view.js"></script>
+<script src="/media-view.js"></script>
+<script src="/subathon-view.js"></script>
+<script src="/twitch-view.js"></script>
 <script src="/overlays.js"></script>
 <script src="/connect.js"></script>
 <script src="/hub.js"></script>
@@ -822,6 +890,11 @@
 <script src="/canvas-control.js"></script>
 <script src="/desk-control.js"></script>
 <script src="/games-control.js"></script>
+<script src="/challenges-control.js"></script>
+<script src="/media-control.js"></script>
+<script src="/subathon-control.js"></script>
+<script src="/twitch-control.js"></script>
+<script src="/ops-control.js"></script>
 <script src="/fold.js"></script>
 </body>
 </html>

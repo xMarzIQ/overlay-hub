@@ -235,7 +235,10 @@
       roll(rollers[2], current.score[0], animate);
       roll(rollers[3], current.score[1], animate);
     }
+    // Each kind of flash has its own switch (all start Off); with the goal flash off, the score just updates
+    const FLASH = { goal: 'goalFlash', scorer: 'goalFlash', red: 'redFlash', nogoal: 'varFlash', added: 'addedBoard', banner: 'banners', sub: 'subs' };
     function enqueue(a) {
+      if (current && FLASH[a.kind] && current.show[FLASH[a.kind]] !== true) return;
       queue.push(a);
       if (a.kind === 'goal') holdScores = true; // the new score rolls in as the goal flash leaves
       if (!playing) runQueue();
@@ -280,7 +283,7 @@
         el.goalIcon.innerHTML = '';
         setText(el.goalWord, 'SUB');
         setText(el.goalTeam, team);
-        setText(el.goalDetail, `On: ${a.name}${a.off ? `   Off: ${a.off}` : ''}${a.minute ? `   ${a.minute}` : ''}`);
+        el.goalDetail.innerHTML = `<span class="sub-on">▲ ${esc(a.name)}</span>${a.off ? ` <span class="sub-off">▼ ${esc(a.off)}</span>` : ''}${a.minute ? ` <span class="sub-min">${esc(a.minute)}</span>` : ''}`;
       } else if (a.kind === 'banner' || a.kind === 'added') {
         el.goal.style.setProperty('--g-1', 'var(--acc-deep)');
         el.goal.style.setProperty('--g-2', 'var(--acc)');
@@ -327,6 +330,9 @@
       if (a.kind === 'goal' || a.kind === 'scorer') lastGoalAt = M.now();
       if (a.kind === 'banner' || a.kind === 'added') lastGoalAt = lastGoalAt; // banners don't bring the scorers out
       el.goal.style.visibility = 'visible';
+      // The whole team name and scorer, always: these lines shrink to fit rather than being cut
+      fitOne(el.goalTeam, 30, 18);
+      fitOne(el.goalDetail, 18, 13);
       const move = 'cubic-bezier(.77,0,.175,1)';
       const settle = 'cubic-bezier(.23,1,.32,1)';
       const enter = el.goal.animate([{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)' }], { duration: 520, easing: move, fill: 'forwards' });
@@ -357,6 +363,15 @@
       el.spot.style.setProperty('--s-c', `var(--${side})`);
       setText(el.spotName, String(a.name).replace(/\s*\((pen|og)\)/i, ''));
       setText(el.spotDetail, [g && g.number ? `No. ${g.number}` : '', M.titleOf(current, t), a.minute].filter(Boolean).join(', '));
+      const bar = el.root.querySelector('.bug-main');
+      const box = el.root.getBoundingClientRect();
+      if (bar && box.width) {
+        const k = 1920 / box.width;
+        const r = bar.getBoundingClientRect();
+        el.spot.style.left = `${Math.round((r.right - box.left) * k + 24)}px`;
+        el.spot.style.top = `${Math.round((r.top - box.top) * k)}px`;
+        el.spot.style.bottom = 'auto';
+      }
       el.spot.classList.add('is-on');
       clearTimeout(spotTimer);
       spotTimer = setTimeout(() => el.spot.classList.remove('is-on'), 6500);
@@ -370,7 +385,7 @@
       setText(el.splHomeName, M.titleOf(current, current.home));
       setText(el.splAwayName, M.titleOf(current, current.away));
       setText(el.splScore, `${current.score[0]}–${current.score[1]}`);
-      fitPair(el.splHomeName, el.splAwayName, 46, 28, 360);
+      fitPair(el.splHomeName, el.splAwayName, 46, 28, Math.max(200, el.splHomeName.parentElement.clientWidth - 20));
       el.splHomeScorers.innerHTML = scorerHtml(current, 0);
       el.splAwayScorers.innerHTML = scorerHtml(current, 1);
       splashUntil = Date.now() + 7000;
@@ -571,12 +586,24 @@
     const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     // Both team names always the same size: one font size that fits the longer name, used for both,
     // and on the bar both team cells the same width so the score sits exactly in the middle.
+    // Names are never cut short: both shrink together down to a minimum, and the space grows if they still need it.
+    // Nothing is measured while hidden (it would measure as zero); they're sized once they show.
+    const shown = (n) => n.getClientRects().length > 0 && n.offsetParent !== null;
     function fitPair(a, b, base, min, maxW) {
+      if (!shown(a) || !shown(b)) return -1;
       [a, b].forEach((n) => { n.style.fontSize = `${base}px`; n.style.maxWidth = 'none'; });
-      const natural = Math.max(a.scrollWidth, b.scrollWidth, 1);
+      const natural = Math.max(a.scrollWidth, b.scrollWidth);
+      if (!natural) return -1;
       const size = Math.max(min, Math.min(base, Math.floor((base * maxW) / natural)));
       [a, b].forEach((n) => { n.style.fontSize = `${size}px`; n.style.maxWidth = ''; });
-      return Math.min(maxW, Math.ceil((natural * size) / base));
+      return Math.max(a.scrollWidth, b.scrollWidth);
+    }
+    // One line of text (the goal flash): shrinks until the whole thing fits
+    function fitOne(n, base, min) {
+      if (!shown(n)) return;
+      let size = base;
+      n.style.fontSize = `${size}px`;
+      while (n.scrollWidth > n.clientWidth + 1 && size > min) { size -= 1; n.style.fontSize = `${size}px`; }
     }
     // Goal scorers: they start a little smaller and shrink together when they don't fit. If there are still too many,
     // each side shows its scorers a page at a time and swaps every 4 seconds, so every scorer is shown on one slim line.
@@ -584,6 +611,7 @@
     let scTimer = 0;
     function fitScorers(s) {
       const box = el.scorers;
+      if (!box.clientWidth) { scKey = ''; return; } // not showing yet
       const key = JSON.stringify([el.scHome._key, el.scAway._key, s.show.style, box.clientWidth]);
       if (key === scKey) return;
       scKey = key;
@@ -637,7 +665,7 @@
       if (!s) return;
       const long = s.show.names !== 'code';
       const mini = s.show.style === 'mini';
-      const key = JSON.stringify([el.homeCode.textContent, el.awayCode.textContent, long, s.show.style, el.ctHomeName.textContent, el.ctAwayName.textContent]);
+      const key = JSON.stringify([el.homeCode.textContent, el.awayCode.textContent, long, s.show.style, el.ctHomeName.textContent, el.ctAwayName.textContent, shown(el.homeCode), shown(el.ctHomeName)]);
       if (key === fitKey) return;
       fitKey = key;
       if (!long) {
@@ -645,17 +673,30 @@
         [el.homeCode, el.awayCode].forEach((n) => { n.style.fontSize = ''; });
       } else {
         const nameW = fitPair(el.homeCode, el.awayCode, mini ? 25 : 34, mini ? 16 : 22, mini ? 150 : 250);
+        if (nameW < 0) { fitKey = ''; return; } // not showing yet: sized as soon as it shows
         const cs = getComputedStyle(el.homeCell);
-        const cellW = Math.ceil(parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + el.homeBadge.offsetWidth + parseFloat(cs.columnGap || cs.gap || 0) + nameW + 4);
+        const gap = parseFloat(cs.columnGap) || parseFloat(cs.gap) || 0;
+        const cellW = Math.ceil(parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + el.homeBadge.offsetWidth + gap + nameW + 6);
         [el.homeCell, el.awayCell].forEach((c) => { c.style.width = `${cellW}px`; });
       }
       // The big stats card and the full-time splash: the same size on both sides too
       fitPair(el.ctHomeName, el.ctAwayName, 46, 28, 330);
-      fitPair(el.splHomeName, el.splAwayName, 46, 28, 360);
+      fitPair(el.splHomeName, el.splAwayName, 46, 28, Math.max(200, el.splHomeName.parentElement.clientWidth - 20));
       placeRedTabs();
     }
-    // Names are measured again once the fonts have loaded
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { fitKey = ''; fitNames(current); });
+    // Sized again whenever the font finishes loading, and whenever the scoreboard appears or changes size
+    const refit = () => { fitKey = ''; scKey = ''; if (current) { fitNames(current); fitScorers(current); } };
+    if (document.fonts) {
+      if (document.fonts.ready) document.fonts.ready.then(refit);
+      if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', refit);
+    }
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => { if (current) { fitNames(current); fitScorers(current); } });
+      [el.root, el.scorers].forEach((n) => { if (n) ro.observe(n); });
+    }
+    // Positions as fans say them: CD-L is a centre-back (CB), AM-R a right winger (RW), F a striker (ST)
+    const POS = { G: 'GK', GK: 'GK', 'CD-L': 'CB', 'CD-R': 'CB', CD: 'CB', CB: 'CB', LB: 'LB', RB: 'RB', LWB: 'LWB', RWB: 'RWB', DM: 'DM', CDM: 'DM', 'DM-L': 'DM', 'DM-R': 'DM', CM: 'CM', 'CM-L': 'CM', 'CM-R': 'CM', LM: 'LM', RM: 'RM', AM: 'AM', CAM: 'AM', 'AM-L': 'LW', 'AM-R': 'RW', LW: 'LW', RW: 'RW', F: 'ST', CF: 'ST', ST: 'ST', 'CF-L': 'ST', 'CF-R': 'ST', LF: 'LW', RF: 'RW', SUB: 'SUB' };
+    const plainPos = (p) => POS[String(p || '').toUpperCase()] || String(p || '');
     const scorerHtml = (s, t) => M.scorers(s, t).split(', ').filter(Boolean).map((x) => `<span class="nb">${esc(x)}</span>`).join(', ');
     // The card in the middle of the screen: line-ups, match info, form, head-to-head or the table
     function paintBoard(s) {
@@ -673,7 +714,7 @@
       let body = '';
       if (kind === 'lineups') {
         title = 'Line-ups';
-        const col = (l, t, side) => `<div class="lu ${side}"><div class="lu-head">${badge(t, side)}<b>${name(t)}</b><span>${esc((l && l.f) || '')}</span></div><ol>${((l && l.xi) || []).map((p) => `<li><i>${esc(p.n)}</i><span>${esc(p.name)}</span><small>${esc(p.pos)}</small></li>`).join('') || '<li class="empty">Not out yet</li>'}</ol></div>`;
+        const col = (l, t, side) => `<div class="lu ${side}"><div class="lu-head">${badge(t, side)}<b>${name(t)}</b><span>${esc((l && l.f) || '')}</span></div><ol>${((l && l.xi) || []).map((p) => `<li><i>${esc(p.n)}</i><span>${esc(p.name)}</span><small>${esc(plainPos(p.pos))}</small></li>`).join('') || '<li class="empty">Not out yet</li>'}</ol></div>`;
         body = `<div class="lu-grid">${col(s.lineups[0], H, 'home')}${col(s.lineups[1], A, 'away')}</div>`;
       } else if (kind === 'info') {
         title = 'Match info';
@@ -715,7 +756,8 @@
       const key = JSON.stringify(s.others);
       if (el.tickerRun._key === key) return;
       el.tickerRun._key = key;
-      const items = s.others.map((o) => `<span class="tk"><b>${esc(o.h)}</b> ${o.hs !== '' ? `<em>${esc(o.hs)}–${esc(o.as)}</em>` : '<em class="v">v</em>'} <b>${esc(o.a)}</b> <small>${esc(o.st)}</small></span>`).join('');
+      const tkState = (st) => (/^(FT|AET|Pens|Final)/i.test(st) ? 'is-ft' : /\d+:\d\d$/.test(st) ? 'is-soon' : 'is-live');
+      const items = s.others.map((o) => `<span class="tk ${tkState(String(o.st || ''))}"><b>${esc(o.h)}</b> ${o.hs !== '' ? `<em>${esc(o.hs)}–${esc(o.as)}</em>` : '<em class="v">v</em>'} <b>${esc(o.a)}</b> <small>${esc(o.st)}</small></span>`).join('');
       el.tickerRun.innerHTML = items + items; // twice, so the loop is seamless
       el.tickerRun.style.animationDuration = `${Math.max(18, s.others.length * 5)}s`;
     }

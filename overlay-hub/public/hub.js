@@ -20,10 +20,11 @@
   };
   const TOKEN_STORE = 'hub-token';
   // This device's own id, so a device the owner approved once doesn't need approving again.
+  if (!store.get('hub-cosy-move', '')) { if (store.get('hub-theme', 'crimson') === 'crimson') store.set('hub-theme', 'cosy'); store.set('hub-cosy-move', '1'); }
   const deviceId = store.get('hub-device', '') || (() => { const v = `d${Math.random().toString(36).slice(2, 12)}`; store.set('hub-device', v); return v; })();
   // Personal settings only change this device: theme, big buttons, vibrate on goals, tips.
   const personal = {
-    get theme() { return store.get('hub-theme', 'crimson'); },
+    get theme() { return store.get('hub-theme', 'cosy'); },
     get big() { return store.get('hub-big', '0') === '1'; },
     get vibrate() { return store.get('hub-vibrate', '1') === '1'; },
     set(k, v) { store.set(`hub-${k}`, typeof v === 'boolean' ? (v ? '1' : '0') : String(v)); applyPersonal(); },
@@ -38,9 +39,13 @@
   // The hub page. Overlays that aren't built yet show as "coming soon" tiles.
   const TILES = [
     { id: 'scoreboard', name: 'Live scoreboard', desc: 'Score, clock, stats and goals, live or by hand', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M6.5 10.5v3M17.5 10.5v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' },
-    { id: 'canvas', name: 'Canvas', desc: 'Draw, pictures, web pages, YouTube, QR codes, music and a tactics board', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20l3.5-.8L19 7.7a2 2 0 0 0 0-2.8l-.9-.9a2 2 0 0 0-2.8 0L3.8 15.5 3 19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 5.5l4.5 4.5" stroke="currentColor" stroke-width="2"/></svg>' },
+    { id: 'canvas', name: 'Canvas', desc: 'Draw, pictures, web pages, YouTube, QR codes and a tactics board', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20l3.5-.8L19 7.7a2 2 0 0 0 0-2.8l-.9-.9a2 2 0 0 0-2.8 0L3.8 15.5 3 19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 5.5l4.5 4.5" stroke="currentColor" stroke-width="2"/></svg>' },
     { id: 'desk', name: 'Stream Desk', desc: 'Timer, countdown, counter, text, lists and a clock', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9v4l2.5 2M9.5 3h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
-    { id: 'games', name: 'Chat Games', desc: 'Polls, Contexto, the flag game, giveaways and a scavenger hunt', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 8h10a4 4 0 0 1 4 4v1.5a3.5 3.5 0 0 1-6.2 2.2L14 14.5h-4l-.8 1.2A3.5 3.5 0 0 1 3 13.5V12a4 4 0 0 1 4-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 11v3M6.5 12.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="11.5" r="1.1" fill="currentColor"/><circle cx="17.8" cy="13.4" r="1.1" fill="currentColor"/></svg>' },
+    { id: 'games', name: 'Chat Games', desc: 'Polls, Contexto, the flag game, giveaways and a leaderboard', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 8h10a4 4 0 0 1 4 4v1.5a3.5 3.5 0 0 1-6.2 2.2L14 14.5h-4l-.8 1.2A3.5 3.5 0 0 1 3 13.5V12a4 4 0 0 1 4-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 11v3M6.5 12.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="11.5" r="1.1" fill="currentColor"/><circle cx="17.8" cy="13.4" r="1.1" fill="currentColor"/></svg>' },
+    { id: 'challenges', name: 'Challenges', desc: 'Bingo, wheels, counters, timers, races, forfeits and more for IRL and gaming challenges', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 12v4M8 20h8M10 16h4v4h-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+    { id: 'twitch', name: 'Twitch Centre', desc: 'Dashboard, title, clips, chat, alerts, polls and more', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 3h17v11l-5 5h-4l-3 3H7v-3H3V6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M11 8v4M16 8v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' },
+    { id: 'subathon', name: 'Subathon & Goals', desc: 'Subathon timer, goals, milestones, wheel spins and contributions', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9v4l3 2M9 2h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' },
+    { id: 'media', name: 'Media Centre', desc: 'Music, playlists, soundboard, slideshows, sponsors, GIFs and your uploads', icon: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M9 18V6l11-2v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
   ];
   const CONN_TEXT = { connecting: 'Connecting…', live: 'Connected', reconnecting: 'Reconnecting…', error: 'Last change wasn’t saved' };
 
@@ -66,7 +71,7 @@
   let locked = false;   // the server has a CONTROL_KEY, so people have to sign in
   let role = 'none';    // 'owner', 'editor', 'pending' or 'none'
   // The tabs this person can use: everything for the owner; for an editor, what the owner ticked in People
-  const ALL_TABS = ['scoreboard', 'canvas', 'desk', 'games'];
+  const ALL_TABS = ['scoreboard', 'canvas', 'desk', 'games', 'challenges', 'media', 'subathon', 'twitch'];
   let tabs = ALL_TABS.slice();
   const allowedTab = (id) => role !== 'editor' || !ALL_TABS.includes(id) || tabs.includes(id);
   let session = {};
@@ -100,7 +105,7 @@
     el.restoreBanner.hidden = !(role === 'owner' && session.fresh && store.get('hub-backup', ''));
     if (!el.restoreBanner.hidden) {
       const copy = JSON.parse(store.get('hub-backup', '{}'));
-      setText(el.restoreText, `The server started empty. This device has a copy of your setup from ${new Date(copy.at || 0).toLocaleString()}.`);
+      setText(el.restoreText, `The server started empty. This device has a copy of your setup from ${new Date(copy.at || 0).toLocaleString()}. If this keeps happening after updates, the server isn’t keeping your setup: in Northflank, attach a Volume at /app/data.`);
     }
     if (window.Settings) window.Settings.refresh();
     paintStreamer();
@@ -236,10 +241,41 @@
   /* ---------- The preview monitor ---------- */
   const stage = Stage.create(el.viewport, { preview: true });
   let monitorMode = store.get('hub-monitor', 'output') === 'preview' ? 'preview' : 'output';
-  let backdrop = ['checker', 'dark', 'light'].includes(store.get('hub-bg', '')) ? store.get('hub-bg', '') : 'checker';
+  let backdrop = ['checker', 'dark', 'light', 'picture'].includes(store.get('hub-bg', '')) ? store.get('hub-bg', '') : 'checker';
+  if (backdrop === 'picture' && !store.get('hub-bg-picture', '')) backdrop = 'checker';
   const safeOn = store.get('hub-safe', '0') === '1';
   stage.setBackdrop(backdrop);
   stage.setSafeArea(safeOn);
+  // The preview's own picture background (only on this device, never uploaded)
+  function applyPicture() {
+    const pic = store.get('hub-bg-picture', '');
+    const bd = document.querySelector('#viewport .backdrop');
+    if (bd) bd.style.setProperty('--bg-picture', pic ? `url("${pic}")` : 'none');
+  }
+  applyPicture();
+  document.getElementById('bgPicture').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 6 * 1048576) { toast('That picture is too big. Use one under 6 MB.', { tone: 'bad' }); return; }
+    const img = new Image();
+    img.onload = () => {
+      // Shrunk to 1920 wide so it fits in this device's storage
+      const c = document.createElement('canvas');
+      const k = Math.min(1, 1920 / img.width);
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const data = c.toDataURL('image/jpeg', 0.82);
+      store.set('hub-bg-picture', data);
+      if (store.get('hub-bg-picture', '') !== data) toast('This device couldn’t keep the picture, so it will go when you reload.');
+      URL.revokeObjectURL(img.src);
+      const bd = document.querySelector('#viewport .backdrop');
+      if (bd) bd.style.setProperty('--bg-picture', `url("${data}")`);
+      backdrop = 'picture'; store.set('hub-bg', backdrop); stage.setBackdrop(backdrop); paintMonitor();
+      toast('Your picture is behind the preview. Only this device can see it.', { tone: 'good' });
+    };
+    img.src = URL.createObjectURL(f);
+  });
   el.safeToggle.checked = safeOn;
   function setMonitor(mode, quiet) {
     monitorMode = mode === 'preview' ? 'preview' : 'output';
@@ -304,7 +340,7 @@
       Object.entries(msg.modules || {}).forEach(([id, state]) => { latest[id] = state; if (modules[id]) receive(modules[id], state); });
       Object.values(modules).forEach(flush);
     },
-    onState: (id, state) => { latest[id] = state; if (modules[id]) receive(modules[id], state); },
+    onState: (id, state) => { latest[id] = state; if (modules[id]) receive(modules[id], state); watchApply(id, state); },
     onTick: (id, msg) => {
       const m = modules[id];
       [m && m.live, m && m.base].forEach((x) => { if (x && x.feed) { x.feed.updatedAt = msg.updatedAt; x.feed.nextAt = msg.nextAt; } });
@@ -332,10 +368,28 @@
         if (window.Settings) window.Settings.refresh('people');
       } else if (msg.type === 'session') {
         checkSession();
+      } else if (msg.type === 'applied' && msg.streamer === current.id) {
+        applied[msg.module] = Math.max(applied[msg.module] || 0, msg.ts);
+        checkApplied();
+      } else if (msg.type === 'setups' && msg.streamer === current.id) {
+        setupsNow = msg.list || [];
+        paintSetups();
+      } else if (msg.type === 'ops' && msg.streamer === current.id) {
+        window.dispatchEvent(new CustomEvent('hub-ops', { detail: msg.ops }));
+      } else if (msg.type === 'notice' && msg.streamer === current.id) {
+        toast(msg.text, { tone: 'bad', ms: 9000 });
+        window.dispatchEvent(new CustomEvent('hub-notice', { detail: msg.text }));
+      } else if (msg.type === 'coedit' && msg.streamer === current.id) {
+        toast(`${msg.who} is also changing this tab right now. Your changes and theirs both save, newest last.`, { ms: 7000 });
+      } else if ((msg.type === 'twitchStatus' || msg.type === 'twitchEvent') && msg.streamer === current.id) {
+        window.dispatchEvent(new CustomEvent('hub-twitch', { detail: msg }));
+      } else if (msg.type === 'restore' && msg.streamer === current.id) {
+        document.querySelectorAll('[data-act="restore-all"]').forEach((b) => { b.hidden = !msg.count; b.textContent = `Restore (${msg.count})`; });
       } else if (msg.type === 'obs' && msg.streamer === current.id) {
         // The "OBS connected" light: green once this streamer's overlay link is open in OBS
         const pill = document.getElementById('obsPill');
         pill.dataset.state = msg.count ? 'on' : 'off';
+        obsNow = msg.count;
         document.getElementById('obsText').textContent = msg.count ? (msg.count > 1 ? `OBS connected (${msg.count})` : 'OBS connected') : 'OBS not connected';
       } else if (msg.type === 'media' && msg.streamer === current.id) {
         window.dispatchEvent(new CustomEvent('hub-media', { detail: { list: msg.list || [], playlistMB: msg.playlistMB || 0 } }));
@@ -343,10 +397,12 @@
         chatLog = msg.list || [];
         chatSettings = msg.chat || chatSettings;
         paintChat(msg.state);
+        window.dispatchEvent(new CustomEvent('hub-chat', { detail: { list: chatLog, state: msg.state } }));
       } else if (msg.type === 'chat' && msg.streamer === current.id) {
         chatLog.push(msg.msg);
         if (chatLog.length > 80) chatLog.shift();
         paintChat();
+        window.dispatchEvent(new CustomEvent('hub-chat', { detail: { list: chatLog } }));
       } else if (msg.type === 'chatStatus') {
         paintChat(msg.state);
       }
@@ -528,6 +584,94 @@
   let chatLog = [];
   let chatSettings = { channel: '', commands: false, allow: [] };
   let chatState = 'off';
+  // Status and go-live check: one place to see that everything's ready, with a coloured dot in the top bar
+  let obsNow = 0;
+  // Saved setups (Setups tab)
+  let setupsNow = [];
+  let setupDelArmed = '';
+  function paintSetups() {
+    const box = document.getElementById('setupList');
+    if (!box) return;
+    box.innerHTML = setupsNow.length ? setupsNow.map((x) => `<div class="setup-row" data-id="${x.id}"><b>${x.name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</b><small>${x.count} on screen</small><button class="btn btn-small btn-primary" type="button" data-act="setup-apply">Show</button><button class="btn btn-small btn-quiet" type="button" data-act="setup-del">${setupDelArmed === x.id ? 'Tap again' : 'Delete'}</button></div>`).join('') : '<p class="note">No setups yet. Put things on screen, name it, and save.</p>';
+  }
+  // After each change: "OBS updating…", then "OBS applied ✓" once the OBS page has drawn it, or "not confirmed" after 3 seconds
+  const applied = {};
+  const wanted = {};
+  let applyTimer = 0;
+  let applyDone = 0;
+  function obsPillText(state, text) { const p = document.getElementById('obsPill'); p.dataset.state = state; document.getElementById('obsText').textContent = text; }
+  function watchApply(id, state) {
+    if (!obsNow || !state || !state.ts || (applied[id] || 0) >= state.ts) return;
+    wanted[id] = Math.max(wanted[id] || 0, state.ts);
+    obsPillText('pending', 'OBS updating…');
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(() => { if (Object.keys(wanted).some((k) => (applied[k] || 0) < wanted[k])) obsPillText('warn', 'OBS not confirmed'); }, 3000);
+  }
+  function checkApplied() {
+    if (!Object.keys(wanted).length || Object.keys(wanted).some((k) => (applied[k] || 0) < wanted[k])) return;
+    Object.keys(wanted).forEach((k) => { delete wanted[k]; });
+    clearTimeout(applyTimer);
+    obsPillText('on', 'OBS applied ✓');
+    clearTimeout(applyDone);
+    applyDone = setTimeout(() => { if (!Object.keys(wanted).length && obsNow) obsPillText('on', obsNow > 1 ? `OBS connected (${obsNow})` : 'OBS connected'); }, 2500);
+  }
+  let usageNow = null;
+  function statusRows() {
+    const rows = [];
+    const add = (group, name, state, text) => rows.push({ group, name, state, text });
+    const conn = el.conn.dataset.state || '';
+    add('Connections', 'Control app', conn === 'offline' ? 'bad' : conn === 'connecting' ? 'warn' : 'ok', conn === 'offline' ? 'Reconnecting…' : conn === 'connecting' ? 'Connecting…' : 'Connected');
+    add('Connections', 'OBS', obsNow ? 'ok' : 'warn', obsNow ? `Overlay link open in OBS${obsNow > 1 ? ` (${obsNow})` : ''}` : 'Not open in OBS yet. Add the overlay link as a Browser source.');
+    if (role === 'owner') {
+      const ch = chatSettings && chatSettings.channel;
+      add('Connections', 'Twitch chat', !ch ? 'off' : chatState === 'on' ? 'ok' : chatState === 'off' ? 'off' : 'warn', !ch ? 'No channel set (Chat tab)' : chatState === 'on' ? `Reading twitch.tv/${ch}` : chatState === 'off' ? 'Off' : 'Connecting…');
+    }
+    const sb = modules.scoreboard && modules.scoreboard.live;
+    if (sb) {
+      const f = sb.feed || {};
+      if (sb.mode !== 'live') add('Connections', 'Live scores', 'off', 'Not in use (Manual mode)');
+      else if (!f.fixtureId) add('Connections', 'Live scores', 'warn', 'No match picked');
+      else if (f.error) add('Connections', 'Live scores', 'bad', f.error);
+      else if (f.done) add('Connections', 'Live scores', 'ok', 'Match finished');
+      else { const age = f.updatedAt ? Math.round((Date.now() - f.updatedAt) / 1000) : null; add('Connections', 'Live scores', age !== null && age < 30 ? 'ok' : 'warn', age === null ? 'Waiting for the first update' : `Updated ${age}s ago`); }
+    }
+    if (role === 'owner') {
+      add('Your setup', 'Saved on the server', session.fresh ? 'warn' : 'ok', session.fresh ? 'The server started empty this time. If it says this after every update, your setup isn’t being kept: in Northflank, attach a Volume at /app/data.' : 'Kept between restarts');
+      if (usageNow) {
+        const up = (usageNow.uploads.used / usageNow.uploads.cap) * 100;
+        const tr = (usageNow.traffic.used / usageNow.traffic.cap) * 100;
+        const dk = usageNow.disk ? (usageNow.disk.used / usageNow.disk.cap) * 100 : 0;
+        const worst = Math.max(up, tr, dk);
+        add('Your setup', 'Storage and traffic', worst >= 90 ? 'bad' : worst >= 70 ? 'warn' : 'ok', `Server storage ${Math.round(dk)}% of 900 MB, uploads ${Math.round(up)}% used, traffic ${Math.round(tr)}% this month`);
+      }
+    }
+    if (sb) {
+      const blank = sb.home.name === 'Home' && sb.away.name === 'Away' && !(sb.feed && sb.feed.fixtureId);
+      add('Ready to go live', 'Match', blank ? 'off' : 'ok', blank ? 'No match picked (fine if you’re not showing the scoreboard)' : `${M.nameOf(sb.home)} v ${M.nameOf(sb.away)}`);
+    }
+    let pv = 0;
+    Object.values(modules).forEach((m) => {
+      const s = m.live;
+      if (!s) return;
+      if (m.id === 'scoreboard') { if (s.preview && !s.onAir) pv += 1; return; }
+      if (m.hooks.visItems) pv += m.hooks.visItems(s).filter(([, o]) => o.vis === 'preview').length;
+    });
+    add('Ready to go live', 'Left in preview', pv ? 'warn' : 'ok', pv ? `${pv} ${pv === 1 ? 'thing is' : 'things are'} in preview only, so viewers can’t see ${pv === 1 ? 'it' : 'them'}` : 'Nothing waiting in preview');
+    const live = onScreenCount();
+    add('Ready to go live', 'On screen now', live ? 'ok' : 'off', live ? `${live} ${live === 1 ? 'overlay' : 'overlays'} on stream` : 'Nothing on stream');
+    return rows;
+  }
+  function paintStatus() {
+    const rows = statusRows();
+    const worst = rows.some((r) => r.state === 'bad') ? 'bad' : rows.some((r) => r.state === 'warn') ? 'warn' : 'ok';
+    const dot = document.getElementById('statusDot');
+    if (dot) dot.dataset.state = worst;
+    const body = document.getElementById('statusBody');
+    if (!body || !document.getElementById('statusDialog').open) return;
+    const groups = [...new Set(rows.map((r) => r.group))];
+    body.innerHTML = groups.map((g) => `<div class="status-group"><h4>${g}</h4>${rows.filter((r) => r.group === g).map((r) => `<div class="status-row" data-state="${r.state}"><i></i><b>${r.name}</b><span>${r.text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</span></div>`).join('')}</div>`).join('');
+  }
+  setInterval(paintStatus, 2000);
   function paintChat(state) {
     if (state) chatState = state;
     const words = { off: 'Off', connecting: 'Connecting…', on: 'Reading', reconnecting: 'Reconnecting…' };
@@ -553,8 +697,15 @@
     if (atBottom) list.scrollTop = list.scrollHeight;
   }
   const saveChat = (body) => call('PATCH', `/api/streamers/${current.id}/chat`, body).then((r) => { chatSettings = r.chat; paintChat(); }).catch((err) => toast(err.message, { tone: 'bad' }));
+  // Activity can be narrowed to one person's changes
+  document.getElementById('activityWho').addEventListener('change', () => paintActivity());
   function paintActivity() {
-    const list = activity.slice(-200).reverse();
+    const pick = document.getElementById('activityWho');
+    const names = [...new Set(activity.map((a) => a.who).filter(Boolean))].sort((x, y) => x.localeCompare(y));
+    const keep = pick.value;
+    const opts = `<option value="">Everyone</option>${names.map((n) => `<option value="${n.replace(/"/g, '&quot;').replace(/</g, '&lt;')}">${n.replace(/</g, '&lt;')}</option>`).join('')}`;
+    if (pick._opts !== opts) { pick._opts = opts; pick.innerHTML = opts; pick.value = names.includes(keep) ? keep : ''; }
+    const list = activity.slice(-200).reverse().filter((a) => !pick.value || a.who === pick.value);
     const frag = document.createDocumentFragment();
     list.forEach((a) => {
       const li = document.createElement('li');
@@ -678,17 +829,42 @@
       setText(art.querySelector('[data-tile-text]'), sum.text);
       if (previews[m.id]) previews[m.id].render(Object.assign({}, m.live, { onAir: true, anims: [] }));
       setText(art.querySelector('[data-tile-small]'), sum.small || '');
-      art.classList.toggle('is-on', !!m.live.onAir);
+      art.classList.toggle('is-on', tileShowing(m));
       setText(art.querySelector('[data-tile-state]'), (m.hooks.isShowing ? m.hooks.isShowing(m.live) : m.live.onAir) ? 'On stream' : 'Hidden');
       art.querySelectorAll('[data-act="tile-air"]').forEach((b) => {
-        b.setAttribute('aria-pressed', String((b.dataset.val === '1') === !!m.live.onAir));
+        b.setAttribute('aria-pressed', String((b.dataset.val === '1') === tileShowing(m)));
         b.disabled = blocked();
       });
     });
   }
+  function tileShowing(m) { return m.hooks.isShowing ? !!m.hooks.isShowing(m.live) : !!m.live.onAir; }
   function setOnAir(id, on) {
     const m = modules[id];
-    if (!m || !m.live || blocked() || !!m.live.onAir === on) return;
+    if (!m || !m.live || blocked()) return;
+    const label = (TILES.find((t) => t.id === id) || {}).name || 'Overlay';
+    if (m.hooks.visItems) {
+      const items = m.hooks.visItems(m.live);
+      const key = `tile-last-${current.id}-${id}`;
+      if (!on) {
+        const was = items.filter(([, o]) => o.vis === 'live').map(([k]) => k);
+        if (!was.length) return;
+        store.set(key, JSON.stringify(was));
+        items.forEach(([, o]) => { if (o.vis === 'live') o.vis = 'off'; });
+        commit(m);
+        toast(`${label}: everything off screen. Show puts it back.`, { tone: 'info' });
+      } else {
+        if (tileShowing(m)) return;
+        let last = [];
+        try { last = JSON.parse(store.get(key) || '[]'); } catch (e) { last = []; }
+        const back = items.filter(([k]) => last.includes(k));
+        if (!back.length) { location.hash = id; toast(`Choose what to show in ${label}.`); return; }
+        back.forEach(([, o]) => { o.vis = 'live'; });
+        commit(m);
+        toast(`${label} is back on screen`, { tone: 'goal' });
+      }
+      return;
+    }
+    if (!!m.live.onAir === on) return;
     m.live.onAir = on;
     if (!on && 'preview' in m.live) m.live.preview = false;
     commit(m, { keepPreview: true });
@@ -786,8 +962,38 @@
       case 'box': setBox(b.dataset.tab); break;
       case 'link-del': call('DELETE', `/api/links/${b.closest('[data-id]').dataset.id}`).catch((err) => setText(el.linkError, err.message)); break;
       case 'link-move': call('PATCH', `/api/links/${b.closest('[data-id]').dataset.id}`, { move: Number(b.dataset.d) }).catch((err) => setText(el.linkError, err.message)); break;
+      case 'status': {
+        const d = document.getElementById('statusDialog');
+        if (d.showModal) d.showModal();
+        if (role === 'owner') call('GET', '/api/usage').then((u) => { usageNow = u; paintStatus(); }).catch(() => {});
+        paintStatus();
+        break;
+      }
+      case 'status-close': document.getElementById('statusDialog').close(); break;
+      case 'undo-last': undo(); break;
+      case 'setup-save': {
+        const name = document.getElementById('setupName').value.trim();
+        if (!name) { toast('Give the setup a name first.'); break; }
+        call('POST', `/api/streamers/${current.id}/setups`, { name }).then((r) => { document.getElementById('setupName').value = ''; toast(r.replaced ? `Updated “${name}” with what’s on screen now.` : `Saved “${name}” (${r.count} on screen).`, { tone: 'good' }); }).catch((err) => toast(err.message, { tone: 'bad' }));
+        break;
+      }
+      case 'setup-apply': {
+        const id = b.closest('[data-id]').dataset.id;
+        call('POST', `/api/streamers/${current.id}/setups/${id}/apply`).then((r) => toast(`“${r.name}” is on screen.`, { tone: 'goal' })).catch((err) => toast(err.message, { tone: 'bad' }));
+        break;
+      }
+      case 'setup-del': {
+        const id = b.closest('[data-id]').dataset.id;
+        if (setupDelArmed !== id) { setupDelArmed = id; paintSetups(); setTimeout(() => { if (setupDelArmed === id) { setupDelArmed = ''; paintSetups(); } }, 4000); break; }
+        setupDelArmed = '';
+        call('DELETE', `/api/streamers/${current.id}/setups/${id}`).catch((err) => toast(err.message, { tone: 'bad' }));
+        break;
+      }
+      case 'restore-all':
+        call('POST', `/api/streamers/${current.id}/restore`).then((r) => toast(`Restored ${r.count === 1 ? '1 thing' : `${r.count} things`} to the screen.`, { tone: 'goal' })).catch((err) => toast(err.message, { tone: 'bad' }));
+        break;
       case 'hide-all':
-        call('POST', `/api/streamers/${current.id}/hide`).then(() => toast('Everything is hidden for this streamer.', { tone: 'info' })).catch((err) => toast(err.message, { tone: 'bad' }));
+        call('POST', `/api/streamers/${current.id}/hide`).then(() => toast('Everything is hidden. Restore puts it all back.', { tone: 'info' })).catch((err) => toast(err.message, { tone: 'bad' }));
         break;
       case 'chat-cmd': saveChat({ commands: b.dataset.val === '1' }); break;
       case 'qb-air': if (modules.scoreboard && modules.scoreboard.live) setOnAir('scoreboard', !modules.scoreboard.live.onAir); break;
@@ -802,7 +1008,15 @@
       case 'open': location.hash = b.dataset.id; break;
       case 'tile-air': setOnAir(b.dataset.id, b.dataset.val === '1'); break;
       case 'monitor': setMonitor(b.dataset.val, true); break;
+      case 'fullscreen': {
+        const shell = document.querySelector('.viewport-shell');
+        if (document.fullscreenElement) document.exitFullscreen(); else if (shell.requestFullscreen) shell.requestFullscreen().catch(() => toast('Full screen isn’t available in this browser.'));
+        break;
+      }
+      case 'bg-picture-change': document.getElementById('bgPicture').click(); break;
       case 'bg':
+        // Your picture: a screenshot of your stream behind the overlays, kept only on this device
+        if (b.dataset.val === 'picture' && !store.get('hub-bg-picture', '')) { document.getElementById('bgPicture').click(); break; }
         backdrop = b.dataset.val;
         store.set('hub-bg', backdrop);
         stage.setBackdrop(backdrop);
@@ -847,6 +1061,10 @@
     if (next) next.focus();
   });
 
+  // Ctrl+Z (Cmd+Z on a Mac) undoes the last change, but never while typing in a box
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement || {}).tagName) && !(document.activeElement || {}).isContentEditable) { e.preventDefault(); undo(); }
+  });
   document.addEventListener('keydown', (e) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target;
@@ -879,7 +1097,26 @@
     if (v === 'preview') return `<div class="vis is-preview"><button class="btn btn-small" type="button" data-vis="off"${a}>Off</button><span class="vis-state">Preview</span><button class="btn vis-go" type="button" data-vis="live"${a}>Show on screen</button></div>`;
     return `<div class="vis is-off"><button class="btn btn-small vis-pv" type="button" data-vis="preview"${a}>Show preview</button><span class="vis-state is-quiet">Off</span></div>`;
   }
+  const recentColours = () => { try { return JSON.parse(localStorage.getItem('hub-recent-colours') || '[]').filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 5); } catch (e) { return []; } };
+  const useColour = (c) => { if (!/^#[0-9a-f]{6}$/i.test(c)) return; const list = [c.toLowerCase(), ...recentColours().filter((x) => x.toLowerCase() !== c.toLowerCase())].slice(0, 5); try { localStorage.setItem('hub-recent-colours', JSON.stringify(list)); } catch (e) { /* this visit only */ } };
+  // Every field gets a name screen readers can say: its placeholder, or its menu's first choice, when nothing else labels it
+  function autoLabel(root) {
+    root.querySelectorAll('input:not([type=hidden]):not([type=file]), select, textarea').forEach((x) => {
+      if (x.closest('label') || x.getAttribute('aria-label') || x.getAttribute('aria-labelledby') || x.title || (x.id && document.querySelector(`label[for="${x.id}"]`))) return;
+      const opt = x.tagName === 'SELECT' && x.options[0] ? x.options[0].textContent : '';
+      const name = (x.placeholder || opt || (x.type === 'range' ? 'Level' : x.type === 'color' ? 'Colour' : '')).replace(/[…:]+$/, '').trim();
+      if (name) x.setAttribute('aria-label', name);
+    });
+  }
+  let labelQueued = false;
+  new MutationObserver(() => { if (labelQueued) return; labelQueued = true; requestAnimationFrame(() => { labelQueued = false; autoLabel(document); }); }).observe(document.body, { childList: true, subtree: true });
+  autoLabel(document);
+
   window.Hub = {
+    get role() { return role; },
+    stateOf: (id) => (modules[id] ? modules[id].live : null),
+    recentColours,
+    useColour,
     visButtons,
     module, call, toast, remember, undo, route, setOnAir,
     get streamer() { return current; },
@@ -890,6 +1127,7 @@
     personal, applyPersonal, saveDeviceCopy, deviceId,
     get token() { return token; },
     raw: (m) => link.send(m),
+    get setups() { return setupsNow; },
     blocked, get monitorMode() { return monitorMode; }, setMonitor, paintMonitor, paintTag,
     store, get view() { return view; },
   };
@@ -899,4 +1137,12 @@
   // Each overlay's controls load in their own script; the page is drawn once they all have.
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', route);
   else setTimeout(route, 0);
+})();
+
+// Presence: which tab this hub tab is on (never other sites, keystrokes or screen contents)
+(() => {
+  const say = () => { try { window.Hub.raw({ type: 'view', view: (location.hash || '#home').slice(1).replace(/[^a-z]/g, '') || 'home' }); } catch (e) { /* not connected yet */ } };
+  window.addEventListener('hashchange', say);
+  setTimeout(say, 1500);
+  setInterval(say, 60000);
 })();

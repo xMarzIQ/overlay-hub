@@ -152,13 +152,13 @@
       delay: 0,                // stream delay in seconds: Live updates and the clock wait this long, to match what viewers see
       tz: 'Europe/London',     // time zone for kick-off times
       look: { accent: 'comp', brand: ACCENT_DEFAULT, sheen: true, celebrate: true },
-      comp: 'Champions League',
+      comp: '',
       compKey: '',
       compLogo: '',
-      kickoff: '20:00',
+      kickoff: '',
       kickoffAt: 0,
-      home: { name: 'Sporting CP', full: 'Sporting Clube de Portugal', code: 'SCP', color: '#12a05c', crestV: 0, swatches: [] },
-      away: { name: 'Manchester United', full: 'Manchester United', code: 'MUN', color: '#e0232e', crestV: 0, swatches: [] },
+      home: { name: 'Home', full: 'Home', code: 'HOM', color: '#2f6fe4', crestV: 0, swatches: [] },
+      away: { name: 'Away', full: 'Away', code: 'AWY', color: '#d6334a', crestV: 0, swatches: [] },
       period: 'pre',
       note: '',                // 'aet' or 'pens' once a match is decided that way
       clock: { base: 0, running: false, at: 0 },
@@ -183,7 +183,7 @@
       auto: { on: false, pre: 'info', ftOff: 10 }, // autopilot
       scenes: [],              // saved setups: { id, name, snap }
       anims: [],               // { id, kind: 'goal' | 'scorer' | 'red', team, name, minute, t }
-      show: { bug: true, drawer: true, card: 'auto', scorers: 'always', names: 'name', nm: 1, yellows: true, timeline: true, banners: true, spotlight: true, splash: true, ticker: false, subs: true, style: 'broadcast' },
+      show: { bug: true, drawer: false, card: 'off', scorers: 'always', names: 'name', nm: 1, yellows: true, timeline: true, banners: false, spotlight: false, splash: false, ticker: false, subs: false, goalFlash: false, redFlash: false, varFlash: false, addedBoard: false, style: 'broadcast', ao: 1 },
       bug: { x: 64, y: 44, s: 1 },
       card: { x: 960, y: 1016, s: 1 },
       feed: defaultFeed(),
@@ -288,22 +288,31 @@
       .slice(-12)
       .map((a) => ({ id: str(a.id).slice(0, 40), kind: a.kind, team: a.team, name: str(a.name).slice(0, 40), minute: str(a.minute).slice(0, 8), t: num(a.t, 0, 1e15, 0), off: str(a.off).slice(0, 40) }));
     const sh = obj(raw.show);
+    // Everything optional starts Off: nothing extra comes on screen unless you switch it on.
+    // Older saves are switched to Off once; after that, whatever you choose stays.
+    const fresh = sh.ao === 1;
+    const on = (v) => fresh && v === true;
     s.show = {
       bug: sh.bug !== false,
-      drawer: sh.drawer !== false,
-      card: ['show', 'auto', 'off'].includes(sh.card) ? sh.card : s.show.card,
+      drawer: on(sh.drawer),
+      card: fresh && ['show', 'auto', 'off'].includes(sh.card) ? sh.card : 'off',
       scorers: ['always', 'goals', 'off'].includes(sh.scorers) ? sh.scorers : s.show.scorers,
       // Names like "Man City" are the default. Older saves move to names once; after that, any choice stays.
       names: sh.nm === 1 && ['code', 'name', 'full'].includes(sh.names) ? sh.names : sh.names === 'full' ? 'full' : 'name',
       nm: 1,
       yellows: sh.yellows !== false,
       timeline: sh.timeline !== false,
-      banners: sh.banners !== false,
-      spotlight: sh.spotlight !== false,
-      splash: sh.splash !== false,
-      ticker: sh.ticker === true,
-      subs: sh.subs !== false,
+      banners: on(sh.banners),
+      spotlight: on(sh.spotlight),
+      splash: on(sh.splash),
+      ticker: on(sh.ticker),
+      subs: on(sh.subs),
+      goalFlash: on(sh.goalFlash),
+      redFlash: on(sh.redFlash),
+      varFlash: on(sh.varFlash),
+      addedBoard: on(sh.addedBoard),
       style: ['broadcast', 'minimal', 'bold', 'mini'].includes(sh.style) ? sh.style : 'broadcast',
+      ao: 1,
     };
     // Round 3 extras. Everything from ESPN is kept small, so saves and updates stay tiny.
     const arr = (v) => (Array.isArray(v) ? v : []);

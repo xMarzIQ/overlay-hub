@@ -16,6 +16,26 @@
       mount: (stage, opts) => window.DeskOverlay.mount(stage, opts),
       normalize: (state) => window.ExtrasModel.deskNormalize(state),
     },
+    twitch: {
+      name: 'Twitch Centre',
+      mount: (stage, opts) => window.TwitchOverlay.mount(stage, opts),
+      normalize: (state) => window.ExtrasModel.twitchNormalize(state),
+    },
+    subathon: {
+      name: 'Subathon & Goals',
+      mount: (stage, opts) => window.SubathonOverlay.mount(stage, opts),
+      normalize: (state) => window.ExtrasModel.subathonNormalize(state),
+    },
+    media: {
+      name: 'Media Centre',
+      mount: (stage, opts) => window.MediaOverlay.mount(stage, opts),
+      normalize: (state) => window.ExtrasModel.mediaNormalize(state),
+    },
+    challenges: {
+      name: 'Challenges',
+      mount: (stage, opts) => window.ChallengesOverlay.mount(stage, opts),
+      normalize: (state) => window.ExtrasModel.challengesNormalize(state),
+    },
     games: {
       name: 'Chat Games',
       mount: (stage, opts) => window.GamesOverlay.mount(stage, opts),

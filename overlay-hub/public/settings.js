@@ -19,12 +19,15 @@
     { id: 'tiles', name: 'Tiles', owner: true },
     { id: 'look', name: 'Overlay look', owner: true },
     { id: 'people', name: 'People', owner: true },
+    { id: 'twitch', name: 'Twitch', owner: true },
     { id: 'passwords', name: 'Passwords', owner: true },
     { id: 'backup', name: 'Backup', owner: true },
     { id: 'storage', name: 'Storage and traffic', owner: true },
+    { id: 'system', name: 'System status', owner: true },
     { id: 'updating', name: 'Updating', owner: true },
   ];
   const THEMES = [
+    { id: 'cosy', name: 'Cosy', sw: ['#1d1612', '#2f241e', '#f2a65a'] },
     { id: 'crimson', name: 'Crimson', sw: ['#0c090b', '#1c151a', '#e11d48'] },
     { id: 'midnight', name: 'Midnight', sw: ['#070b14', '#141b2c', '#3b82f6'] },
     { id: 'pitch', name: 'Pitch', sw: ['#06100b', '#12221a', '#22c55e'] },
@@ -35,7 +38,7 @@
   const isOwner = () => Hub.role === 'owner';
   const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content; };
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const when = (t) => (t ? new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'never');
+  const when = (t) => (t ? new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'never');
   const left = (t) => {
     if (!t) return 'Never expires';
     const s = Math.round((t - Date.now()) / 1000);
@@ -52,8 +55,19 @@
     if (!dialog.open && dialog.showModal) dialog.showModal();
     if (section === 'people') loadPeople();
     if (section === 'storage') loadUsage();
+    if (section === 'twitch') loadTwitch();
+    if (section === 'personal') loadMe();
+    if (section === 'system') loadSystem();
     paint();
   }
+  // Twitch: the connection for the streamer you're on
+  let tw = null;
+  let twArmed = 0;
+  async function loadTwitch() {
+    try { tw = await Hub.call('GET', `/api/twitch/status?streamer=${encodeURIComponent(Hub.streamer.id)}`); } catch (e) { tw = { failed: e.message }; }
+    if (section === 'twitch' && dialog.open) paint();
+  }
+  window.addEventListener('hub-twitch', () => { if (dialog.open && section === 'twitch') loadTwitch(); });
   let usage = null;
   async function loadUsage() {
     try { usage = await Hub.call('GET', '/api/usage'); } catch (e) { usage = null; }
@@ -73,10 +87,113 @@
     const waiting = Number(document.getElementById('cogBadge').textContent) || 0;
     nav.innerHTML = '<h2>Settings</h2>' + SECTIONS.filter((x) => !x.owner || isOwner())
       .map((x) => `<button type="button" data-section="${x.id}" aria-current="${String(x.id === section)}"><span>${x.name}</span>${x.id === 'people' && waiting ? `<span class="badge-n">${waiting}</span>` : ''}</button>`).join('');
-    body.replaceChildren(h(`<button class="btn btn-quiet btn-small settings-close" type="button" data-set="close">Done</button>`), ...[RENDER[section]()]);
+    const node = RENDER[section]();
+    if (section === 'personal' && Hub.role === 'editor' && node) node.appendChild(h(myAccount()));
+    body.replaceChildren(h(`<button class="btn btn-quiet btn-small settings-close" type="button" data-set="close">Done</button>`), node);
   }
 
+  const twEvent = (e) => `${esc(e.user)} ${({ sub: 'subscribed', resub: `resubscribed${e.months ? ` (${e.months} months)` : ''}`, gift: `gifted ${e.amount} sub${e.amount === 1 ? '' : 's'}`, bits: `cheered ${e.amount} bits`, follow: 'followed', raid: `raided with ${e.amount}`, redeem: `redeemed ${esc(e.reward)}`, online: 'went live', offline: 'went offline' })[e.kind] || e.kind}`;
+  // Live editor activity: which tabs they have open and when they last changed something (never keystrokes or screens)
+  const VIEW_NAMES = { home: 'Home', scoreboard: 'Live scoreboard', canvas: 'Canvas', desk: 'Stream Desk', games: 'Chat Games', challenges: 'Challenges', media: 'Media Centre', subathon: 'Subathon & Goals', twitch: 'Twitch Centre' };
+  const presence = (p) => {
+    const mins = p.lastAct ? Math.round((Date.now() - p.lastAct) / 60000) : -1;
+    return `${(p.views || []).length ? `On ${p.views.map((v) => VIEW_NAMES[v] || v).join(', ')}. ` : ''}${mins < 0 ? 'Hasn’t changed anything since connecting.' : mins < 2 ? 'Active now.' : `Last change ${mins} min ago${mins >= 15 ? ' (idle)' : ''}.`}`;
+  };
+  // System status (owner): plain-English health with measured values marked as measured
+  let sys = null;
+  let sysTimer = 0;
+  async function loadSystem() {
+    try { sys = await Hub.call('GET', '/api/system'); } catch (e) { sys = { failed: e.message }; }
+    if (section === 'system' && dialog.open) paint();
+    clearTimeout(sysTimer);
+    sysTimer = setTimeout(() => { if (section === 'system' && dialog.open) loadSystem(); }, 10000);
+  }
+  const mbs = (b) => `${Math.round(b / 1048576)} MB`;
+  const ago = (t) => { if (!t) return 'not yet'; const s2 = Math.round((Date.now() - t) / 1000); return s2 < 90 ? `${s2} s ago` : s2 < 5400 ? `${Math.round(s2 / 60)} min ago` : `${Math.round(s2 / 3600)} h ago`; };
+  const bar = (used, cap) => { const pc = Math.min(100, Math.round((used / cap) * 100)); return `<div class="sys-bar"><i style="width:${pc}%" data-level="${pc > 85 ? 'bad' : pc > 70 ? 'warn' : 'ok'}"></i></div>`; };
+  function systemHtml() {
+    if (!sys) return '<p class="lead">Checking…</p>';
+    if (sys.failed) return `<p class="lead">${esc(sys.failed)}</p>`;
+    const m = sys.memory;
+    const lim = m.limit || m.plan;
+    const worst = sys.warnings.some((w) => w.level === 'bad') ? 'bad' : sys.warnings.length ? 'warn' : 'ok';
+    return `<p class="sys-health" data-level="${worst}">${worst === 'ok' ? 'Everything looks healthy.' : worst === 'warn' ? 'Mostly fine, with something to keep an eye on.' : 'Something needs attention.'}</p>
+      ${sys.warnings.length ? `<div class="set-group"><h4>Warnings</h4>${sys.warnings.map((w) => `<p class="note" data-level="${w.level}">${esc(w.text)}${w.id ? ` <button class="btn btn-small" type="button" data-set="sys-ack" data-id="${w.id}" data-streamer="${w.streamer}">OK</button>` : ''}</p>`).join('')}</div>` : ''}
+      <div class="set-group"><h4>Server</h4><p class="note">Version ${esc(sys.version)}, running for ${Math.floor(sys.uptime / 3600)} h ${Math.floor(sys.uptime / 60) % 60} min (since ${new Date(sys.started).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}).</p>
+        <p class="note">Memory: ${mbs(m.rss)} of ${mbs(lim)} ${m.limitMeasured ? '(measured limit)' : '(the plan’s 256 MB, as the server can’t read its own limit here)'}.</p>${bar(m.rss, lim)}
+        <p class="note">Response delay: ${sys.loop.lagMs} ms now, worst lately ${sys.loop.worstMs} ms ${sys.loop.worstMs > 500 ? '(slow at times)' : '(fine)'}.</p></div>
+      <div class="set-group"><h4>Saving</h4><p class="note">Last saved ${ago(sys.data.lastSave)}${sys.data.fails ? `, ${sys.data.fails} failed saves` : ', no failures'}. Setup file ${Math.round(sys.data.stateBytes / 1024)} KB, presets and versions ${Math.round(sys.data.toolsBytes / 1024)} KB.${sys.data.startedEmpty ? ' The server started with nothing saved: attach the Volume so restarts keep everything.' : ''}</p></div>
+      <div class="set-group"><h4>Storage and traffic</h4><p class="note">Uploads ${mbs(sys.storage.uploads)} of ${mbs(sys.storage.uploadCap)}</p>${bar(sys.storage.uploads, sys.storage.uploadCap)}<p class="note">Everything stored ${mbs(sys.storage.disk)} of ${mbs(sys.storage.diskCap)}</p>${bar(sys.storage.disk, sys.storage.diskCap)}<p class="note">Traffic this month ${(sys.storage.traffic / 1e9).toFixed(2)} of ${(sys.storage.trafficCap / 1e9).toFixed(0)} GB</p>${bar(sys.storage.traffic, sys.storage.trafficCap)}</div>
+      <div class="set-group"><h4>Connections</h4><p class="note">${sys.presence.browsers} browser${sys.presence.browsers === 1 ? '' : 's'} with ${sys.presence.hubTabs} hub tab${sys.presence.hubTabs === 1 ? '' : 's'} open, ${sys.presence.overlays} OBS link${sys.presence.overlays === 1 ? '' : 's'} open. Twitch chat reader: ${esc(sys.chat || 'off')}.</p>
+        ${sys.streamers.map((x) => `<p class="note"><b>${esc(x.name)}</b>: OBS ${x.obs.open ? `open (${x.obs.open}), last heartbeat ${ago(x.obs.lastBeat)}, last change shown ${ago(x.obs.lastApplied)}` : 'not open'}${x.obs.connects > 1 ? `, ${x.obs.connects - 1} reconnects since the server started` : ''}. Twitch ${!x.twitch.configured ? 'not set up' : !x.twitch.connected ? (x.twitch.revoked ? 'needs reconnecting' : 'not connected') : `connected, events ${esc(x.twitch.events)}${x.twitch.lastEvent ? `, last event ${ago(x.twitch.lastEvent)}` : ''}${x.twitch.missingScopes ? `, ${x.twitch.missingScopes} permissions missing` : ''}`}. Tools: ${x.tools.buttons} buttons, ${x.tools.rules} automations on, ${x.tools.locks} locks.</p>`).join('')}
+        <p class="note">An open OBS link means the page is loaded somewhere, not that it’s live on stream.</p></div>
+      <div class="set-group"><h4>Fix things</h4><div class="btn-row"><button class="btn btn-small" type="button" data-set="sys-refresh">Check again</button><button class="btn btn-small" type="button" data-set="sys-twitch">Reconnect Twitch</button><button class="btn btn-small" type="button" data-set="sys-resync">Re-send everything to OBS</button><button class="btn btn-small" type="button" data-set="sys-verify">Check the saved file</button></div>
+        <div class="btn-row"><button class="btn btn-small" type="button" data-set="sys-export">Download status (no private details)</button><button class="btn btn-small" type="button" data-set="sys-activity">Download Activity (this streamer)</button><button class="btn btn-small ch-tog" type="button" data-set="sys-beep" aria-pressed="${localStorage.getItem('hub-beep') === '1'}">Beep for warnings: ${localStorage.getItem('hub-beep') === '1' ? 'On' : 'Off'}</button></div>
+        <p class="note">Nothing here restarts the server or deletes anything.</p></div>`;
+  }
+  // A short beep for new warnings, if switched on (this device only)
+  window.addEventListener('hub-notice', () => {
+    if (localStorage.getItem('hub-beep') !== '1') return;
+    try { const a = new (window.AudioContext || window.webkitAudioContext)(); const o = a.createOscillator(); const g = a.createGain(); o.frequency.value = 880; g.gain.value = 0.08; o.connect(g); g.connect(a.destination); o.start(); setTimeout(() => { o.frequency.value = 660; }, 160); setTimeout(() => { o.stop(); a.close(); }, 380); } catch (e) { /* no audio here */ }
+  });
+  const downloadFile = (url, name) => fetch(url, { headers: { Authorization: `Bearer ${Hub.token}` } }).then((r) => r.blob()).then((blob) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href); }).catch(() => Hub.toast('The download didn’t work.', { tone: 'bad' }));
+  const TW_PERM_NAMES = [['dash', 'Dashboard and stats'], ['feed', 'Subscriber names and activity'], ['chat', 'Read chat'], ['say', 'Send chat messages'], ['clips', 'Clips'], ['markers', 'Markers'], ['title', 'Change title'], ['category', 'Change category'],
+    ['delete', 'Delete messages'], ['timeout', 'Time people out'], ['ban', 'Ban'], ['unban', 'Unban'], ['chatset', 'Chat modes'], ['polls', 'Twitch polls'], ['preds', 'Predictions'], ['points', 'Channel points'], ['timers', 'Timed messages'], ['cmds', 'Commands'], ['shout', 'Shoutouts'], ['alerts', 'Alerts'], ['history', 'Stream history']];
+  // The Twitch Centre box stays open while the owner changes it
+  const twOpen = new Set();
+  document.getElementById('settingsBody').addEventListener('toggle', (e) => { const d = e.target; if (d.dataset && d.dataset.twopen) { if (d.open) twOpen.add(d.dataset.twopen); else twOpen.delete(d.dataset.twopen); } }, true);
+  const twBox = (p) => {
+    const tw = p.tw || { preset: 'none', perms: [] };
+    const hasTab = (p.tabs || []).includes('twitch');
+    return `<details class="tw-access" data-twopen="${p.id}"${twOpen.has(p.id) ? ' open' : ''}><summary><small class="note">Twitch Centre: <b>${{ none: 'No access', content: 'Content editor', manager: 'Stream manager', moderator: 'Moderator', custom: `Custom (${tw.perms.length})` }[tw.preset] || 'No access'}</b>${hasTab ? '' : ' (tick the Twitch Centre tab too)'}</small></summary>
+      <select class="select" name="twp-${p.id}" aria-label="Twitch Centre access">${[['none', 'No access'], ['content', 'Content editor: clips and markers'], ['manager', 'Stream manager: stats, clips, markers, title, category'], ['moderator', 'Moderator: chat, timeouts, bans, chat modes'], ['custom', 'Custom']].map(([v, l]) => `<option value="${v}"${tw.preset === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <div class="checks tw-perms">${TW_PERM_NAMES.map(([v, l]) => `<label><input type="checkbox" name="twc-${p.id}" value="${v}"${tw.perms.includes(v) ? ' checked' : ''}> ${l}</label>`).join('')}</div>
+      <small class="note">Moderation also needs them to link their own Twitch (in their Personal settings), and Twitch must confirm they're a mod there. They never use the streamer's account to moderate.</small></details>`;
+  };
+  // My account (editors): their own access, devices, sign-ins and activity, and linking their own Twitch for moderation
+  let me = null;
+  async function loadMe() {
+    if (Hub.role !== 'editor') return;
+    try { me = await Hub.call('GET', '/api/me'); me.tw = await Hub.call('GET', '/api/twitch/me'); } catch (e) { me = { failed: e.message }; }
+    if (section === 'personal' && dialog.open) paint();
+  }
+  const myAccount = () => {
+    if (!me) return '<div class="set-group"><h4>My account</h4><p class="note">Loading…</p></div>';
+    if (me.failed) return `<div class="set-group"><h4>My account</h4><p class="note">${esc(me.failed)}</p></div>`;
+    const modPerms = ['delete', 'timeout', 'ban', 'unban', 'chatset'].filter((x) => (me.twitch || []).includes(x));
+    return `<div class="set-group"><h4>My account: ${esc(me.name)}</h4>
+      <p class="note">Access ${me.expiresAt ? `until ${new Date(me.expiresAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'with no end date'}. Streamers: ${esc(me.streamers.join(', ') || 'none')}. Open now: ${me.browsers} browser${me.browsers === 1 ? '' : 's'}, ${me.tabsOpen} tab${me.tabsOpen === 1 ? '' : 's'}.</p>
+      <p class="note">Twitch Centre: ${me.twitch.length ? esc(me.twitch.map((x) => (TW_PERM_NAMES.find((n) => n[0] === x) || [x, x])[1]).join(', ')) : 'no access'}.</p>
+      ${modPerms.length ? `<p class="note">${me.tw.linked ? `Moderating as <b>${esc(me.tw.login)}</b> (your own Twitch).` : 'To moderate, link your own Twitch account. Twitch checks you’re a mod of the channel.'}</p><div class="btn-row">${me.tw.linked ? '<button class="btn btn-small" type="button" data-set="tw-unlink">Unlink my Twitch</button>' : '<button class="btn btn-small btn-primary" type="button" data-set="tw-link">Link my Twitch</button>'}</div>` : ''}
+      <h4>My devices</h4>${me.devices.map((d, i) => `<span class="device-chip">${esc(d.name)}${d.me ? ' (this one)' : ''}${d.me ? '' : `<button class="btn btn-quiet btn-small" type="button" data-set="me-out" data-i="${i}">Sign out</button>`}</span>`).join(' ') || '<p class="note">None</p>'}
+      <h4>My sign-ins</h4><ul class="tw-feed">${me.signins.slice(0, 8).map((x) => `<li><time>${new Date(x.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time>${esc(x.device || '')}: ${esc(x.what)}</li>`).join('') || '<li>Nothing yet</li>'}</ul>
+      <h4>What I've done</h4><ul class="tw-feed">${me.activity.slice(0, 15).map((a) => `<li><time>${new Date(a.at || a.t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time>${esc(a.streamer)}: ${esc(a.text || a.what || '')}</li>`).join('') || '<li>Nothing yet</li>'}</ul></div>`;
+  };
   const RENDER = {
+    system() { return h(`<div><h3>System status</h3><p class="lead">How the server, saving, OBS and Twitch are doing, in plain words.</p>${systemHtml()}</div>`); },
+    twitch() {
+      const name = esc(Hub.streamer.name);
+      if (!tw) return h('<div><h3>Twitch</h3><p class="lead">Loading…</p></div>');
+      if (tw.failed) return h(`<div><h3>Twitch</h3><p class="lead">${esc(tw.failed)}</p></div>`);
+      const steps = `<div class="set-group"><h4>Set up once (free)</h4><ol class="tw-steps">
+          <li>Go to <b>dev.twitch.tv/console</b>, sign in, and press <b>Register Your Application</b>.</li>
+          <li>Name it anything (like Overlay Hub). For <b>OAuth Redirect URLs</b> add exactly:<div class="tw-copy"><code>${esc(tw.redirect)}</code><button class="btn btn-small" type="button" data-set="tw-copy">Copy</button></div></li>
+          <li>Category: <b>Broadcaster Suite</b>. Client Type: <b>Confidential</b>. Press <b>Create</b>, then <b>Manage</b>.</li>
+          <li>Copy the <b>Client ID</b>, and press <b>New Secret</b> to get the <b>Client Secret</b>.</li>
+          <li>In Northflank, open overlay-hub, then <b>Environment</b>, and add <code>TWITCH_CLIENT_ID</code> and <code>TWITCH_CLIENT_SECRET</code> (mark the secret as secret). Save; it restarts by itself.</li>
+        </ol></div>`;
+      if (!tw.configured) return h(`<div><h3>Twitch</h3><p class="lead">Connect each streamer’s Twitch so subs, bits, follows and raids can drive the Subathon timer, goals and alerts. It’s free.</p>${steps}</div>`);
+      const ev = (tw.feed || []).slice(0, 10).map((e) => `<li><time>${new Date(e.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</time> ${twEvent(e)}</li>`).join('');
+      const state = { connected: 'Receiving live events', connecting: 'Connecting to Twitch…', reconnecting: 'Reconnecting to Twitch…', off: 'Not listening' }[tw.events] || tw.events;
+      return h(`<div><h3>Twitch</h3><p class="lead">The Twitch account for <b>${name}</b>. Only you can connect or disconnect it. Its keys stay on the server and are never shown to editors or OBS.</p>
+        ${tw.connected ? `<div class="set-group"><h4>Connected as ${esc(tw.login)}</h4><p class="note"><span class="tw-dot" data-state="${tw.events}"></span>${state}</p>
+          ${tw.missingScopes.length ? `<p class="note">Some permissions are missing (${tw.missingScopes.length}). Press Reconnect to grant them.</p>` : ''}
+          ${tw.missingEvents.length ? `<p class="note">Not receiving: ${tw.missingEvents.map(esc).join(', ')}.</p>` : ''}
+          <div class="btn-row"><button class="btn" type="button" data-set="tw-connect">Reconnect</button><button class="btn btn-quiet" type="button" data-set="tw-disconnect">${Date.now() - twArmed < 4000 ? 'Tap again to disconnect' : 'Disconnect'}</button></div></div>
+          <div class="set-group"><h4>Latest Twitch events</h4>${ev ? `<ul class="tw-feed">${ev}</ul>` : '<p class="note">Nothing yet. Subs, bits, follows and raids appear here as they happen.</p>'}</div>`
+        : `<div class="set-group">${tw.revoked ? '<p class="note">Twitch access was removed or expired. Connect again to restore it.</p>' : ''}<button class="btn btn-primary" type="button" data-set="tw-connect">Connect ${name}’s Twitch</button><p class="note">You’ll sign in on Twitch and come straight back here.</p></div>`}
+        <details class="set-group"><summary>Setup steps</summary>${steps}</details></div>`);
+    },
     personal() {
       const p = Hub.personal;
       return h(`<div>
@@ -117,20 +234,23 @@
     people() {
       if (!people) return h('<div><h3>People</h3><p class="lead">Loading…</p></div>');
       const streamers = Hub.streamers;
-      const TAB_NAMES = [['scoreboard', 'Live scoreboard'], ['canvas', 'Canvas'], ['desk', 'Stream Desk'], ['games', 'Chat Games']];
+      const TAB_NAMES = [['scoreboard', 'Live scoreboard'], ['canvas', 'Canvas'], ['desk', 'Stream Desk'], ['games', 'Chat Games'], ['challenges', 'Challenges'], ['media', 'Media Centre'], ['subathon', 'Subathon & Goals'], ['twitch', 'Twitch Centre']];
       const tabChecks = (name, chosen) => `<div class="checks">${TAB_NAMES.map(([v, l]) => `<label><input type="checkbox" name="${name}" value="${v}"${chosen.includes(v) ? ' checked' : ''}>${l}</label>`).join('')}</div>`;
       const checks = (name, chosen) => `<div class="checks">${streamers.map((x) => `<label><input type="checkbox" name="${name}" value="${x.id}"${chosen.includes(x.id) ? ' checked' : ''}>${esc(x.name)}</label>`).join('')}</div>`;
       const access = (name, val) => `<select class="select" name="${name}" aria-label="How long their access lasts">${ACCESS.map(([v, label]) => `<option value="${v}"${v === val ? ' selected' : ''}>${label}</option>`).join('')}</select>`;
       const reqs = people.requests.map((r) => `<div class="person" data-req="${r.id}"><div class="person-top"><b>${esc(r.username)}</b><small>${esc(r.device)}, asked ${when(r.at)}</small></div>
         <small class="note">Streamers they can run:</small>${checks(`rs-${r.id}`, streamers[0] ? [streamers[0].id] : [])}
-        <small class="note">Tabs they can use:</small>${tabChecks(`rt-${r.id}`, TAB_NAMES.map((t) => t[0]))}
+        <small class="note">Tabs they can use:</small>${tabChecks(`rt-${r.id}`, TAB_NAMES.map((t) => t[0]).filter((t) => t !== 'twitch'))}
         <div class="person-actions">${access(`ra-${r.id}`, '24h')}<button class="btn btn-primary btn-small" type="button" data-set="req-accept">Accept</button><button class="btn btn-quiet btn-small" type="button" data-set="req-decline">Decline</button></div></div>`).join('');
-      const list = people.people.map((p) => `<div class="person" data-person="${p.id}"><div class="person-top"><b>${esc(p.username)}</b><span class="pill${p.online ? ' is-on' : ''}">${p.online ? 'Online now' : `Last seen ${when(p.lastSeen)}`}</span><span class="pill">${left(p.expiresAt)}</span><span class="grow"></span>
+      const list = people.people.map((p) => `<div class="person" data-person="${p.id}"><div class="person-top"><b>${esc(p.username)}</b><span class="pill${p.online ? ' is-on' : ''}">${p.online ? `Online: ${p.browsers} browser${p.browsers === 1 ? '' : 's'}, ${p.tabsOpen} tab${p.tabsOpen === 1 ? '' : 's'}` : `Last seen ${when(p.lastSeen)}`}</span><span class="pill">${left(p.expiresAt)}</span><span class="grow"></span>
         <button class="btn btn-quiet btn-small${confirming.get(`del|${p.id}`) ? ' is-confirming' : ''}" type="button" data-set="person-del">${confirming.get(`del|${p.id}`) ? 'Tap again' : 'Remove'}</button></div>
         <small class="note">Streamers they can run:</small>${checks(`ps-${p.id}`, p.streamers)}
-        <small class="note">Tabs they can use:</small>${tabChecks(`pt-${p.id}`, p.tabs || TAB_NAMES.map((t) => t[0]))}
+        <small class="note">Tabs they can use:</small>${tabChecks(`pt-${p.id}`, p.tabs || ['scoreboard', 'canvas', 'desk', 'games'])}
+        ${twBox(p)}
+        ${p.online ? `<small class="note">${presence(p)}</small>` : ''}
         <div class="person-actions"><span class="note">Access:</span>${access(`pa-${p.id}`, '')}<button class="btn btn-small" type="button" data-set="person-access">Set</button>
-        <span class="note">${p.devices.map((d) => esc(d.name)).join(', ') || 'No devices signed in'}</span></div></div>`).join('');
+        <span class="note">${p.devices.length ? '' : 'No devices signed in'}</span></div>
+        ${p.devices.length ? `<div class="person-devices">${p.devices.map((d, i) => `<span class="device-chip">${esc(d.name)}<button class="btn btn-quiet btn-small" type="button" data-set="device-out" data-i="${i}">Sign out</button></span>`).join('')}</div>` : ''}</div>`).join('');
       const hist = people.signins.map((x) => `<li><time>${when(x.at)}</time><span${x.ok ? '' : ' class="bad"'}><b>${esc(x.username)}</b>${x.device ? `, ${esc(x.device)}` : ''}: ${esc(x.what)}</span></li>`).join('');
       return h(`<div>
         <h3>People</h3><p class="lead">Editors sign in with their name and the editor password, then wait for you. You choose how long their access lasts and which streamers they can run. Editors can only use the tabs you tick for them, and never see the OBS link, Links, Activity, Chat, People, settings or uploads.</p>
@@ -166,6 +286,7 @@
       const tp = (usage.traffic.used / usage.traffic.cap) * 100;
       return h(`<div>
         <h3>Storage and traffic</h3><p class="lead">The hub keeps itself inside Northflank’s free plan: uploads stop at 700 MB, leaving the rest of the 1 GB volume free, and big files pause if a month’s traffic reaches 8 GB.</p>
+        ${usage.disk ? `<div class="set-group"><h4>Server storage: ${mb(usage.disk.used)} of ${mb(usage.disk.cap)}</h4>${bar(usage.disk.used, usage.disk.cap)}<p class="note">Everything the hub keeps (uploads, crests and your setup) never goes over 900 MB.</p></div>` : ''}
         <div class="set-group"><h4>Uploads: ${mb(usage.uploads.used)} of ${mb(usage.uploads.cap)}</h4>${bar(usage.uploads.used, usage.uploads.cap)}
           <p class="note">Each streamer’s share is ${mb(usage.uploads.share)}.</p>
           ${usage.streamers.map((x) => `<div class="set-row"><span class="set-name">${esc(x.name)}<small>${x.files} file${x.files === 1 ? '' : 's'}</small></span><span>${mb(x.used)}</span></div>`).join('')}</div>
@@ -252,6 +373,29 @@
         act(() => Hub.call('POST', `/api/people/requests/${id}/accept`, { streamers, tabs, expires }), 'Approved. They’re in.').then(loadPeople);
         break;
       }
+      case 'sys-refresh': loadSystem(); break;
+      case 'sys-twitch': Hub.call('POST', '/api/system/retry-twitch').then((r) => { Hub.toast(r.note); setTimeout(loadSystem, 2500); }).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break;
+      case 'sys-resync': Hub.call('POST', '/api/system/resync').then((r) => Hub.toast(r.note)).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break;
+      case 'sys-verify': Hub.call('POST', '/api/system/verify').then((r) => Hub.toast(r.note, { tone: r.ok ? 'goal' : 'bad', ms: 9000 })).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break;
+      case 'sys-export': fetch('/api/system/export', { method: 'POST', headers: { Authorization: `Bearer ${Hub.token}` } }).then((r) => r.blob()).then((blob) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'overlay-hub-status.json'; a.click(); URL.revokeObjectURL(a.href); }); break;
+      case 'sys-activity': downloadFile(`/api/streamers/${encodeURIComponent(Hub.streamer.id)}/activity.csv`, 'activity.csv'); break;
+      case 'sys-beep': localStorage.setItem('hub-beep', localStorage.getItem('hub-beep') === '1' ? '0' : '1'); paint(); break;
+      case 'sys-ack': Hub.call('POST', `/api/streamers/${encodeURIComponent(b.dataset.streamer)}/ops/notice-ack`, { id: b.dataset.id }).then(loadSystem).catch(() => {}); break;
+      case 'tw-link': Hub.call('POST', '/api/twitch/link-me').then((r) => { location.href = r.url; }).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break;
+      case 'tw-unlink': Hub.call('POST', '/api/twitch/unlink-me').then(() => { Hub.toast('Unlinked your Twitch.'); loadMe(); }).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break;
+      case 'me-out': Hub.call('POST', `/api/me/devices/${b.dataset.i}/signout`).then(() => { Hub.toast('That device is signed out.'); loadMe(); }).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break;
+      case 'tw-copy': navigator.clipboard.writeText(tw.redirect).then(() => Hub.toast('Copied the redirect address.')).catch(() => Hub.toast(tw.redirect, { ms: 9000 })); break;
+      case 'tw-connect': Hub.call('POST', '/api/twitch/connect', { streamer: Hub.streamer.id }).then((r) => { location.href = r.url; }).catch((err) => Hub.toast(err.message, { tone: 'bad' })); break;
+      case 'tw-disconnect':
+        if (Date.now() - twArmed > 4000) { twArmed = Date.now(); paint(); setTimeout(() => { if (section === 'twitch') paint(); }, 4100); break; }
+        twArmed = 0;
+        Hub.call('POST', '/api/twitch/disconnect', { streamer: Hub.streamer.id }).then(() => { Hub.toast('Twitch disconnected.'); loadTwitch(); }).catch((err) => Hub.toast(err.message, { tone: 'bad' }));
+        break;
+      case 'device-out': {
+        const card = b.closest('[data-person]');
+        act(() => Hub.call('POST', `/api/people/${card.dataset.person}/devices/${b.dataset.i}/signout`), 'That device is signed out.').then(loadPeople);
+        break;
+      }
       case 'req-decline': act(() => Hub.call('POST', `/api/people/requests/${b.closest('[data-req]').dataset.req}/decline`), 'Declined').then(loadPeople); break;
       case 'person-access': {
         const card = b.closest('[data-person]');
@@ -292,6 +436,10 @@
       const card = t.closest('[data-person]');
       const streamers = Array.from(card.querySelectorAll(`input[name="${t.name}"]:checked`)).map((x) => x.value);
       act(() => Hub.call('PATCH', `/api/people/${card.dataset.person}`, { streamers }), 'Streamers updated').then(loadPeople);
+    } else if (t.name && (t.name.startsWith('twp-') || t.name.startsWith('twc-'))) {
+      const card = t.closest('[data-person]');
+      const body = t.name.startsWith('twp-') ? { tw: { preset: t.value } } : { tw: { preset: 'custom', perms: Array.from(card.querySelectorAll(`input[name="${t.name}"]:checked`)).map((x) => x.value) } };
+      act(() => Hub.call('PATCH', `/api/people/${card.dataset.person}`, body), 'Twitch Centre access updated. It changes on their screen straight away.').then(loadPeople);
     } else if (t.name && t.name.startsWith('pt-')) {
       const card = t.closest('[data-person]');
       const tabs = Array.from(card.querySelectorAll(`input[name="${t.name}"]:checked`)).map((x) => x.value);

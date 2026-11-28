@@ -51,6 +51,13 @@ function createChat({ onMessage, onStatus }) {
       c: /^#[0-9a-f]{6}$/i.test(tags.color || '') ? tags.color : '',
       text: m[4].slice(0, 300),
       t: Date.now(),
+      // For moderation and command permissions: the message and user IDs and badges Twitch sends with each message
+      id: (tags.id || '').slice(0, 40),
+      uid: (tags['user-id'] || '').slice(0, 20),
+      mod: /(^|,)(moderator|broadcaster)\//.test(tags.badges || ''),
+      bc: /(^|,)broadcaster\//.test(tags.badges || ''),
+      sub: /(^|,)(subscriber|founder)\//.test(tags.badges || ''),
+      vip: /(^|,)vip\//.test(tags.badges || ''),
     });
   }
   function syncJoins() {

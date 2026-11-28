@@ -352,3 +352,48 @@ The word list (wordlist/, about 1 MB, made from the free GloVe word set) and the
 In Settings, People, you choose for each editor which streamers they can run and which tabs they can use (Live scoreboard, Canvas, Stream Desk, Chat Games). The server enforces it: an editor's hub never receives the other tabs, and any change they try there is refused. Changes reach their screen straight away.
 
 Editors never see the OBS link or the Hide link, so they can't copy or pass them on. They also can't see Links, Activity, Chat, People, settings or uploads. People approved before tab choices existed keep every tab until you untick some.
+
+## New tabs in this version
+
+**Challenges**: 16 kinds of on-screen challenge (bingo and scavenger hunts, a random wheel, trackers, counters, timers, versus, lives, forfeits, mystery reveals, races, milestones, team picker, leaderboard). Everything starts Off.
+
+**Media Centre**: your uploads in one library, plus the music player (moved here from Canvas), playlists, a soundboard, slideshows, sponsor rotation, GIFs and a mixer. Sounds only play when pressed. In OBS, tick **Control audio via OBS** on the Browser source to hear music, sounds and alert audio.
+
+**Subathon & Goals**: a subathon timer the server keeps (it survives restarts), contribution rules, goals, milestones, a wheel spin queue, bonus periods, sleep and break modes, history and leaderboards. With Twitch connected, subs, gifts, bits and follows count by themselves, once each; anything can also be added by hand.
+
+**Twitch Centre** (owner only unless you give an editor access): dashboard, title and category, clips, markers, live chat and moderation, chat modes, channel points, official polls and predictions, alerts, timed messages, commands, shoutouts and stream history. Alerts, timed messages and commands start Off.
+
+## Connect Twitch (free, once)
+
+1. Go to dev.twitch.tv/console, sign in and press **Register Your Application**.
+2. Name it anything. For **OAuth Redirect URLs** paste the address shown in the hub under **Settings, Twitch** (it ends in `/api/twitch/callback`).
+3. Category **Broadcaster Suite**, Client Type **Confidential**, then **Create**, then **Manage**.
+4. Copy the **Client ID**, and press **New Secret** for the **Client Secret**.
+5. In Northflank, open overlay-hub, then **Environment**, and add `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (mark the secret as secret). It restarts by itself.
+6. In the hub: **Settings, Twitch, Connect**. Do this once per streamer.
+
+Optional: `PUBLIC_URL` (like `https://your-site.code.run`) if the redirect address ever comes out wrong.
+
+The Twitch permissions asked for: channel:read:subscriptions, bits:read, moderator:read:followers, channel:read:redemptions, channel:manage:redemptions, channel:manage:broadcast, clips:edit, channel:manage:polls, channel:manage:predictions, moderator:manage:banned_users, moderator:manage:chat_messages, moderator:manage:chat_settings, moderator:manage:shoutouts, moderator:manage:announcements, user:write:chat, user:read:chat. Editors who moderate link their own account with only the moderation permissions plus user:read:moderated_channels.
+
+## Twitch Centre permissions for editors
+
+In **Settings, People**, tick the **Twitch Centre** tab for an editor, then open **Twitch Centre** under their name and pick a preset or tick actions one by one:
+
+- **No access** (everyone starts here)
+- **Content editor**: clips and markers
+- **Stream manager**: dashboard, clips, markers, title and category
+- **Moderator**: read and send chat, delete messages, timeouts, bans and chat modes
+- **Custom**: any of the 21 permissions
+
+The server checks every action. Editors who moderate must link their own Twitch in **Settings, Personal**, and Twitch must confirm they're a moderator of that channel. Connecting or disconnecting a streamer's Twitch is always owner only.
+
+## New files
+
+`twitch.js` (Twitch sign-in, keys and live events), `subathon.js` (subathon counting and timing), `twitchcentre.js` (Twitch Centre), and in `public`: `media-view.js`, `media-control.js`, `subathon-view.js`, `subathon-control.js`, `twitch-view.js`, `twitch-control.js`. The Twitch keys are saved encrypted in `twitch-tokens.json` on the Volume, never in backups.
+
+## The cosy theme
+
+The control app now opens in the **Cosy** theme: warm walnut and cocoa, linen text, lamp-honey buttons, Nunito for reading and Fraunces for headings (both bundled, free). Change it any time in **Settings, Personal, Theme**. The overlays on stream are unchanged.
+
+New font files: `public/fonts/nunito-var-latin.woff2` and `public/fonts/fraunces-soft-latin.woff2` (SIL Open Font Licence).

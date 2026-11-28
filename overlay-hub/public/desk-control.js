@@ -23,6 +23,7 @@
 
   const ctl = Hub.module('desk', {
     patchable: ['widgets'],
+    visItems: (s) => s.widgets.map((w) => [w.id, w]),
     onState(s) { live = s; paint(); },
     isShowing: (s) => s.widgets.some((w) => w.vis === 'live'),
     liveCount: (s) => s.widgets.filter((w) => w.vis === 'live').length,
@@ -92,8 +93,10 @@
           ${controls(w)}
           <div class="dk-look">
             <label class="dk-inline">Label <input class="input" data-dk="label" maxlength="40" value="${esc(w.label)}" placeholder="Optional, shows above"></label>
-            <div class="dk-colours"><button type="button" data-dk="colour" data-val="brand" style="background:var(--brand)" aria-label="Brand colour" title="Brand colour"></button>${COLOURS.map((c) => `<button type="button" data-dk="colour" data-val="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${c === w.color}"></button>`).join('')}<input type="color" data-dk="colour-pick" value="${w.color}" aria-label="Any colour"></div>
-            <label class="dk-inline dk-size">Size <input type="range" min="40" max="250" step="5" data-dk="scale" value="${Math.round(w.scale * 100)}"></label>
+            <div class="dk-colours"><button type="button" data-dk="colour" data-val="brand" style="background:var(--brand)" aria-label="Brand colour" title="Brand colour"></button>${COLOURS.map((c) => `<button type="button" data-dk="colour" data-val="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${c === w.color}"></button>`).join('')}${Hub.recentColours().filter((c) => !COLOURS.includes(c)).map((c) => `<button type="button" class="recent" data-dk="colour" data-val="${c}" style="background:${c}" aria-label="Recent colour ${c}" aria-pressed="${c === w.color}"></button>`).join('')}<input type="color" data-dk="colour-pick" value="${w.color}" aria-label="Any colour"></div>
+            <label class="dk-inline dk-size">Size <input type="range" min="40" max="250" step="5" data-dk="scale" value="${Math.round(w.scale * 100)}"${w.lock ? ' disabled' : ''}></label>
+            <button type="button" class="btn btn-small lock-btn" data-dk="lock" aria-pressed="${!!w.lock}">${w.lock ? 'Locked' : 'Lock position'}</button>
+            <select class="select preset" data-dk="preset" aria-label="Move to"${w.lock ? ' disabled' : ''}>${[['', 'Move to…'], ['240,150', 'Top left'], ['960,150', 'Top'], ['1680,150', 'Top right'], ['240,540', 'Left'], ['960,540', 'Centre'], ['1680,540', 'Right'], ['240,930', 'Bottom left'], ['960,930', 'Bottom'], ['1680,930', 'Bottom right']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
           </div>
         </div></details>`;
     }).join('');
@@ -123,6 +126,7 @@
       case 't-run': if (w.running) { w.base = X.timerNow(w, now); w.running = false; } else { w.running = true; w.at = now; } break;
       case 't-reset': { const done = Hub.remember('desk', 'Timer reset.'); w.running = false; w.base = w.mode === 'up' ? 0 : w.dur; commit(); done(); return; }
       case 't-mode': w.mode = v; w.running = false; w.base = v === 'up' ? 0 : w.dur; break;
+      case 'lock': w.lock = !w.lock; break;
       case 'c-step': w.value += Number(v) * w.step; break;
       case 'c-reset': { const done = Hub.remember('desk', 'Counter reset.'); w.value = 0; commit(); done(); return; }
       case 'x-scroll': w.scroll = v === '1'; break;
@@ -142,7 +146,8 @@
     const i = t.closest('[data-i]') ? Number(t.closest('[data-i]').dataset.i) : -1;
     switch (t.dataset.dk) {
       case 'label': w.label = t.value; break;
-      case 'colour-pick': w.color = t.value; break;
+      case 'colour-pick': w.color = t.value; Hub.useColour(t.value); break;
+      case 'preset': if (t.value) { const [x, y] = t.value.split(',').map(Number); w.x = x; w.y = y; } break;
       case 'scale': w.scale = Number(t.value) / 100; break;
       case 't-min': w.dur = Math.max(0, Number(t.value) || 0) * 60; if (w.mode === 'down') { w.base = w.dur; w.running = false; } break;
       case 'target': w.target = new Date(t.value).getTime() || w.target; break;
