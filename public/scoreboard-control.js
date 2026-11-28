@@ -87,7 +87,7 @@
     const text = `${M.codeOf(s.home)} ${s.score[0]}–${s.score[1]} ${M.codeOf(s.away)}`;
     let small;
     if (M.inPlay(s)) small = M.minuteMark(s) || 'Live';
-    else if (s.period === 'pre') small = s.kickoff ? `KO ${s.kickoff}` : 'Pre-match';
+    else if (s.period === 'pre') small = s.kickoff ? `KO ${koLabel(s)}` : 'Pre-match';
     else small = { ht: 'HT', brk: 'Break', pens: 'Pens', ft: 'FT' }[s.period] || '';
     return { text, small };
   }
@@ -811,11 +811,21 @@
   }
   // A match that kicked off more than 12 hours ago and isn't on screen is cleared when the hub opens
   // (with Undo), so yesterday's game isn't waiting there. Follow my team loads the next match by itself instead.
-  function clearIfOld() {
-    if (!live || live.onAir || !live.kickoffAt || Date.now() - live.kickoffAt < 12 * 3600 * 1000) return;
-    if (live.follow && live.follow.team) return;
+  // The kick-off with its day when it isn't today, so an old or future match is obvious ("KO Thu 20:00", "KO 2 Dec 20:00")
+  function koLabel(s) {
+    if (!s.kickoffAt) return s.kickoff;
+    const d = new Date(s.kickoffAt);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return s.kickoff;
+    return Math.abs(d - now) < 6 * 86400000 ? `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${s.kickoff}` : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${s.kickoff}`;
+  }
+  function clearIfOld(force) {
+    if (!live) return;
+    if (force && live.onAir) { Hub.toast('Take the scoreboard off screen first, then clear the match.', { tone: 'bad' }); return; }
+    if (!force && (live.onAir || !live.kickoffAt || Date.now() - live.kickoffAt < 12 * 3600 * 1000)) return;
+    if (!force && live.follow && live.follow.team) return;
     const was = `${M.nameOf(live.home)} v ${M.nameOf(live.away)}`;
-    undoable(`${was} was an old match, so the scoreboard was cleared. Pick today’s match in Find a match.`, () => {
+    undoable(force ? `${was} cleared. Pick a match in Find a match when you need one.` : `${was} was an old match, so the scoreboard was cleared. Pick today’s match in Find a match.`, () => {
       const d = M.defaults();
       ['home', 'away', 'comp', 'compLogo', 'kickoff', 'kickoffAt', 'period', 'note', 'added', 'score', 'pens', 'stats', 'goals', 'reds', 'anims', 'shoot'].forEach((k) => { if (k in d) live[k] = M.copy(d[k]); });
       M.setClock(live, 0, false);
@@ -1126,6 +1136,7 @@
       case 'card-home': live.card.x = SB.W / 2; live.card.y = SB.H - 64; keepInside('card'); commit({ keepPreview: true }); break;
       case 'crest-clear': removeCrest(team === 0 ? 'home' : 'away'); break;
       case 'reset': confirmTwice(b, newMatch); break;
+      case 'clear-match': confirmTwice(b, () => clearIfOld(true)); break;
       case 'comp': feedComp = b.dataset.comp; Hub.store.set('sb-comp', feedComp); syncFeed(); loadFixtures(false); break;
       case 'day': feedDay = shiftDay(Number(b.dataset.shift)); syncFeed(); loadFixtures(false); break;
       case 'feed-link': linkFixture(b.dataset.id, b); break;

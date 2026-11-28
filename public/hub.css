@@ -1335,3 +1335,8 @@ html[data-theme="cosy"] .vis.is-preview .vis-state { color: var(--amber); }
 .sys-bar i { display: block; height: 100%; background: var(--signal, #8cc277); }
 .sys-bar i[data-level="warn"] { background: var(--amber, #f4bd5c); }
 .sys-bar i[data-level="bad"] { background: #ef6a4f; }
+
+/* Tile status line: side by side when there's room, stacked when there isn't (never one letter per line) */
+.tile-live { flex-wrap: wrap; row-gap: 4px; }
+.tile-live span { flex: 1 1 auto; overflow-wrap: break-word; word-break: normal; }
+.tile-live small { flex: 0 1 auto; white-space: normal; text-align: right; line-height: 1.25; overflow-wrap: break-word; }
