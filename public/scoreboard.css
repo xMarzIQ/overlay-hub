@@ -513,3 +513,27 @@
 .prog { display: none; }
 /* The scorer row never makes the scoreboard wider: it takes the bar's width, and the scorers fit inside it */
 .scorers { width: 0; min-width: 100%; }
+
+/* Whole names, always: nothing is cut short with "…" (the overlay sizes them to fit instead) */
+.team.is-name .code { overflow: visible; text-overflow: clip; }
+.goal-team, .goal-detail { text-overflow: clip; }
+.splash-name { overflow: visible; text-overflow: clip; white-space: normal; text-wrap: balance; line-height: 1.02; }
+
+/* Hide everything: no exit animations on the OBS page */
+.instant *, .instant *::before, .instant *::after { transition: none !important; animation: none !important; }
+
+.backdrop[data-bg="picture"] { background: #111 var(--bg-picture, none) center / cover no-repeat; }
+
+/* Polish pass */
+.goal-detail .sub-on { color: #3ee28a; }
+.goal-detail .sub-off { color: #ff6b7a; margin-left: 10px; }
+.goal-detail .sub-min { opacity: .85; margin-left: 10px; }
+.tk + .tk::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 20px 3px 4px; border-radius: 50%; background: rgba(255, 255, 255, .35); vertical-align: middle; }
+.tk.is-live small { color: #3ee28a; }
+.tk.is-live small::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #3ee28a; vertical-align: 1px; }
+.tk.is-ft small { color: rgba(255, 255, 255, .55); }
+.tk.is-soon small { color: #ffd166; }
+.sc-side .kick { width: 20px; height: 20px; }
+/* Added time: a fourth official's LED board */
+.goal[data-kind="added"] { background: #060807; }
+.goal[data-kind="added"] .goal-word, .goal[data-kind="added"] .goal-team, .goal[data-kind="added"] .goal-detail { color: #46ff7e; text-shadow: 0 0 12px rgba(70, 255, 126, .65); font-variant-numeric: tabular-nums; letter-spacing: .04em; }

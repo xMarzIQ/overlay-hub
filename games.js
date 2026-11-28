@@ -97,6 +97,13 @@ function createEngine(dir) {
   };
 }
 
+// The leaderboard across games: 3 points for a Contexto win, 1 for each flag
+function award(s, u, pts) {
+  const list = s.board.list.slice();
+  const e = list.find((x) => x.u === u);
+  if (e) e.pts += pts; else list.push({ u, pts });
+  s.board.list = list.sort((a, b) => b.pts - a.pts).slice(0, 10);
+}
 // One chat message against one streamer's games. Returns true if anything changed.
 function handleChat(s, mem, m, engine) {
   const text = String(m.text || '').trim();
@@ -121,6 +128,14 @@ function handleChat(s, mem, m, engine) {
   const bang = /^!g(?:uess)?\s+(.+)$/i.exec(text);
   const guess = bang ? bang[1] : s.mode !== 'bang' && /^[\p{L}' .-]{2,40}$/u.test(text) ? text : '';
   if (!guess) return false;
+  // Each person can only guess every few seconds (the host chooses), so nobody wins by spamming
+  const cool = Number(s.cool) || 0;
+  if (cool && (s.contexto.open || s.flags.open)) {
+    if (!mem.lastGuess) mem.lastGuess = new Map();
+    const last = mem.lastGuess.get(m.login) || 0;
+    if (Date.now() - last < cool * 1000) return false;
+    mem.lastGuess.set(m.login, Date.now());
+  }
   if (s.contexto.open && /^[\p{L}]+$/u.test(guess.trim())) {
     const g = engine.contextoGuess(mem, guess);
     if (g && !mem.guessed.has(g.w)) {
@@ -128,7 +143,7 @@ function handleChat(s, mem, m, engine) {
       s.contexto.count += 1;
       s.contexto.last = { w: g.w, r: g.r, u: m.u };
       s.contexto.guesses = s.contexto.guesses.concat({ w: g.w, r: g.r, u: m.u }).sort((a, b) => a.r - b.r).slice(0, 10);
-      if (g.r === 1) { s.contexto.winner = { u: m.u, w: g.w }; s.contexto.open = false; }
+      if (g.r === 1) { s.contexto.winner = { u: m.u, w: g.w }; s.contexto.open = false; award(s, m.u, 3); }
       changed = true;
     }
   }
@@ -139,6 +154,7 @@ function handleChat(s, mem, m, engine) {
     const e = board.find((x) => x.u === m.u);
     if (e) e.pts += 1; else board.push({ u: m.u, pts: 1 });
     s.flags.board = board.sort((a, b) => b.pts - a.pts).slice(0, 10);
+    award(s, m.u, 1);
     changed = true;
   }
   return changed;

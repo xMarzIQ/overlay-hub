@@ -41,6 +41,7 @@
     function drag(node, wid) {
       if (!preview || !opts.onDrag) return;
       node.addEventListener('pointerdown', (e) => {
+        if (node.dataset.lock === '1') return; // locked: stays where it is
         e.preventDefault();
         node.setPointerCapture(e.pointerId);
         const k = 1920 / root.getBoundingClientRect().width;
@@ -48,15 +49,36 @@
         const from = [parseFloat(node.style.left), parseFloat(node.style.top)];
         let to = from;
         node.classList.add('is-dragging');
-        const move = (ev) => { to = [Math.round(from[0] + (ev.clientX - start[0]) * k), Math.round(from[1] + (ev.clientY - start[1]) * k)]; node.style.left = `${to[0]}px`; node.style.top = `${to[1]}px`; };
-        const up = () => { node.removeEventListener('pointermove', move); node.classList.remove('is-dragging'); if (to !== from) opts.onDrag(wid, Math.max(0, Math.min(1920, to[0])), Math.max(0, Math.min(1080, to[1]))); };
+        const move = (ev) => { to = [Math.round(from[0] + (ev.clientX - start[0]) * k), Math.round(from[1] + (ev.clientY - start[1]) * k)]; if (Math.abs(to[0] - 960) < 16) to[0] = 960; if (Math.abs(to[1] - 540) < 16) to[1] = 540; root.classList.toggle('guide-x', to[0] === 960); root.classList.toggle('guide-y', to[1] === 540); node.style.left = `${to[0]}px`; node.style.top = `${to[1]}px`; };
+        const up = () => { node.removeEventListener('pointermove', move); root.classList.remove('guide-x', 'guide-y'); node.classList.remove('is-dragging'); if (to !== from) opts.onDrag(wid, Math.max(0, Math.min(1920, to[0])), Math.max(0, Math.min(1080, to[1]))); };
         node.addEventListener('pointermove', move);
         node.addEventListener('pointerup', up, { once: true });
         node.addEventListener('pointercancel', up, { once: true });
       });
     }
+    // Running order on stream: only the current and next titles and the time left (never notes or future plans)
+    const ro = document.createElement('div');
+    ro.dataset.id = 'rundown';
+    root.appendChild(ro);
+    const mmss = (sec) => { sec = Math.max(0, Math.round(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+    function drawRundown(s) {
+      const rd = s.rundown;
+      if (!rd) return;
+      const p = rd.pub;
+      const on = p.on && !!p.now && X.shows(rd.look.vis, preview);
+      const left = p.mins * 60 - X.roElapsed(p, Date.now());
+      const html = on ? `<div class="ro-row"><span class="ro-tag">Now</span><b>${esc(p.now)}</b>${p.mins ? `<em>${left >= 0 ? mmss(left) : `+${mmss(-left)}`}</em>` : ''}</div>${p.next ? `<div class="ro-row is-next"><span class="ro-tag">Next</span><b>${esc(p.next)}</b></div>` : ''}` : '';
+      if (ro._html !== html) { ro._html = html; ro.innerHTML = html; }
+      ro.className = `dk-w ro-w${on ? ' is-on' : ''}${preview && rd.look.vis === 'preview' ? ' is-pv' : ''}`;
+      ro.style.left = `${rd.look.x}px`;
+      ro.style.top = `${rd.look.y}px`;
+      ro.style.setProperty('--c', rd.look.color);
+      ro.style.transform = `translate(-50%, -50%) scale(${rd.look.scale})`;
+    }
+    setInterval(() => { if (current) drawRundown(current); }, 1000);
     function render(s) {
       current = s;
+      drawRundown(s);
       s.widgets.forEach((w) => {
         let node = nodes[w.id];
         if (!node) {
@@ -70,6 +92,7 @@
         const html = inner(w);
         if (node._html !== html) { node._html = html; node.innerHTML = html; }
         if (!node.classList.contains('is-dragging')) { node.style.left = `${w.x}px`; node.style.top = `${w.y}px`; }
+        node.dataset.lock = w.lock ? '1' : '';
         node.style.setProperty('--c', w.color);
         node.style.transform = `translate(-50%, -50%) scale(${w.scale})`;
         node.classList.toggle('is-on', X.shows(w.vis, preview));

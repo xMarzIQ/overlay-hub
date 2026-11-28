@@ -15,7 +15,9 @@
     viewport.appendChild(el);
     let scale = 1;
     function fit() {
-      const r = viewport.getBoundingClientRect();
+      // Measured in the page's own units, so the hub's zoom doesn't shrink the stage a second time
+      const box = viewport.getBoundingClientRect();
+      const r = { width: viewport.clientWidth || box.width, height: viewport.clientHeight || box.height };
       if (!r.width || !r.height) return;
       scale = Math.min(r.width / W, r.height / H);
       const ox = (r.width - W * scale) / 2;

@@ -52,7 +52,10 @@
     // One switch for every pop-up instead of five
     const pop = document.createElement('div');
     pop.className = 'item-row wrap';
-    pop.innerHTML = '<div class="item-name static"><span>Pop-ups<small>Kick-off and half-time banners, added time, scorer spotlight, subs and the full-time splash</small></span></div><div class="seg seg-sm" role="group" aria-label="Pop-ups"><button type="button" data-act="popups" data-val="1">On</button><button type="button" data-act="popups" data-val="0">Off</button></div>';
+    // Every flash and pop-up has its own switch, plus All on and All off. They all start Off.
+    pop.className = 'flash-list';
+    pop.innerHTML = '<div class="item-row wrap"><div class="item-name static"><span>Flashes and pop-ups<small>Each one only plays while the scoreboard is on screen</small></span></div><div class="btn-row"><button class="btn btn-small" type="button" data-act="popups" data-val="1">All on</button><button class="btn btn-small" type="button" data-act="popups" data-val="0">All off</button></div></div>'
+      + [['goalFlash', 'Goal flash'], ['redFlash', 'Red card flash'], ['varFlash', 'VAR: goal ruled out'], ['addedBoard', 'Added-time board'], ['banners', 'Kick-off, half-time and full-time banners'], ['spotlight', 'Scorer spotlight'], ['splash', 'Full-time splash'], ['subs', 'Substitutions']].map(([k, n]) => `<div class="item-row wrap flash-row"><div class="item-name static"><span>${n}</span></div><div class="seg seg-sm" role="group" aria-label="${n}"><button type="button" data-act="flash" data-key="${k}" data-val="1">On</button><button type="button" data-act="flash" data-key="${k}" data-val="0">Off</button></div></div>`).join('');
     // Scorers and the stats card: just On or Off
     const scorers = itemWith('scorers');
     if (scorers) {
@@ -121,6 +124,7 @@
   const box = q('#box');
   if (box) {
     const f = fold('box', 'OBS link, links, activity and chat', 'The link to paste into OBS, and the owner’s extras', false, [], I.link);
+    f.classList.add('owner-only'); // editors never see this dropdown, not even its title
     box.insertAdjacentElement('beforebegin', f);
     f.querySelector('.fold-body').appendChild(box);
   }

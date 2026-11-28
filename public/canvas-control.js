@@ -10,6 +10,13 @@
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const COLOURS = ['#ff3b5c', '#ffd166', '#2ee59d', '#38bdf8', '#ffffff', '#111827'];
+  // Player counters for the tactics pitch: both teams in a formation, home on the left (pitch metres 105 x 68)
+  const SHAPES = {
+    442: [[5, 34], [20, 10], [20, 26], [20, 42], [20, 58], [36, 10], [36, 26], [36, 42], [36, 58], [48, 26], [48, 42]],
+    433: [[5, 34], [20, 10], [20, 26], [20, 42], [20, 58], [34, 20], [34, 34], [34, 48], [47, 12], [49, 34], [47, 56]],
+  };
+  const NUMS = { 442: [1, 2, 5, 6, 3, 7, 4, 8, 11, 9, 10], 433: [1, 2, 5, 6, 3, 8, 4, 10, 7, 9, 11] };
+  const lineUp = (f) => [0, 1].flatMap((t) => SHAPES[f].map(([x, y], i) => ({ t, n: String(NUMS[f][i]), x: t ? 105 - x : x, y: t ? 68 - y : y })));
   const NAMES = { image: 'Picture', web: 'Web page', youtube: 'YouTube', text: 'Text', qr: 'QR code', pitch: 'Tactics pitch' };
   const POS_NAMES = { tl: 'Top left', tc: 'Top middle', tr: 'Top right', ml: 'Middle left', mc: 'Middle', mr: 'Middle right', bl: 'Bottom left', bc: 'Bottom middle', br: 'Bottom right' };
   let live = null;
@@ -21,6 +28,12 @@
 
   const ctl = Hub.module('canvas', {
     patchable: ['items', 'strokes', 'ink', 'spot', 'music', 'boards'],
+    // For the tile's Show and Off: every Canvas item, the drawing, the spotlight and the music
+    visItems: (s) => s.items.map((i) => [i.id, i]).concat([
+      ['ink', { get vis() { return s.ink; }, set vis(v) { s.ink = v; } }],
+      ['spot', { get vis() { return s.spot.on ? 'live' : 'off'; }, set vis(v) { s.spot.on = v === 'live'; } }],
+      ['music', { get vis() { return s.music.playing ? 'live' : 'off'; }, set vis(v) { s.music.playing = v === 'live'; } }],
+    ]),
     onState(s) { live = s; sync(); },
     isShowing: (s) => s.items.some((i) => i.vis === 'live') || (s.ink === 'live' && s.strokes.length > 0) || s.spot.on || s.music.playing,
     liveCount: (s) => s.items.filter((i) => i.vis === 'live').length + (s.ink === 'live' && s.strokes.length ? 1 : 0),
@@ -28,7 +41,11 @@
       const on = s.items.filter((i) => i.vis === 'live').length;
       return { text: on ? `${on} on screen` : 'Nothing on screen', small: s.music.playing ? 'Music playing' : s.ink === 'live' && s.strokes.length ? 'Drawing on screen' : '' };
     },
-    onDrag(id, x, y) { const it = live && live.items.find((i) => i.id === id); if (it) { it.x = x; it.y = y; commit(); } },
+    onDrag(id, x, y) {
+      // A player counter dragged on a tactics pitch: "man:<item>:<number>"
+      if (id.startsWith('man:')) { const [, itemId, n] = id.split(':'); const it = live && live.items.find((i) => i.id === itemId); if (it && it.men[Number(n)]) { it.men[Number(n)].x = x; it.men[Number(n)].y = y; commit(); } return; }
+      const it = live && live.items.find((i) => i.id === id); if (it) { it.x = x; it.y = y; commit(); }
+    },
   });
   const commit = () => ctl.commit();
 
@@ -119,8 +136,10 @@
       const left = it.until ? Math.max(0, Math.round((it.until - Date.now()) / 1000)) : 0;
       return `<div class="cv-row is-item" data-id="${it.id}"><span class="cv-name">${NAMES[it.type]}<small>${esc(label)}${left ? `, turns off in ${left} s` : ''}</small></span>
         ${Hub.visButtons(it.vis)}
-        <span class="cv-ctl">${it.type === 'text' ? `<label class="dk-inline">Colour <input type="color" data-cv="item-color" value="${it.color}" aria-label="Text colour"></label>` : ''}<label class="dk-inline dk-size">Size <input type="range" min="20" max="300" step="5" data-cv="item-scale" value="${Math.round(it.scale * 100)}"></label>
+        ${it.type === 'pitch' ? `<span class="cv-ctl pitch-ctl"><button class="btn btn-small" type="button" data-cv="men" data-val="442">Players 4-4-2</button><button class="btn btn-small" type="button" data-cv="men" data-val="433">Players 4-3-3</button><button class="btn btn-small btn-quiet" type="button" data-cv="men" data-val="">No players</button><small>Drag players around the pitch in the preview</small></span>` : ''}
+        <span class="cv-ctl">${it.type === 'text' ? `<label class="dk-inline">Colour <input type="color" data-cv="item-color" value="${it.color}" aria-label="Text colour"></label>` : ''}<label class="dk-inline dk-size">Size <input type="range" min="20" max="300" step="5" data-cv="item-scale"${it.lock ? ' disabled' : ''} value="${Math.round(it.scale * 100)}"></label>
         <select class="select" data-cv="item-timer" aria-label="Turn off after"><option value="0">No timer</option><option value="10">Off after 10 s</option><option value="30">Off after 30 s</option><option value="60">Off after 1 min</option><option value="300">Off after 5 min</option></select>
+        <button class="btn btn-small lock-btn" type="button" data-cv="item-lock" aria-pressed="${!!it.lock}">${it.lock ? 'Locked' : 'Lock'}</button>
         <button class="btn btn-quiet btn-small" type="button" data-cv="item-up" aria-label="Bring to the front">↑</button>
         <button class="btn btn-quiet btn-small" type="button" data-cv="item-del" aria-label="Remove">×</button></span></div>`;
     }).join('');
@@ -137,7 +156,7 @@
     const used = songs.reduce((n, m) => n + m.size, 0);
     $('cvLibNote').textContent = owner ? `Pictures up to 8 MB, MP3s up to 30 MB. Songs use ${mb(used)} of the ${playlistMB} MB playlist.` : 'You can use anything in the library. Only the owner can add or remove files.';
     const html = media.map((m) => `<div class="cv-row" data-id="${m.id}"><span class="cv-name">${esc(m.name)}<small>${m.kind === 'audio' ? 'Song' : 'Picture'}, ${mb(m.size)}${m.pinned ? ', pinned' : ''}${owner ? '' : ' <span class="lock">(locked)</span>'}</small></span><span class="cv-ctl">
-      ${m.kind === 'audio' ? `<button class="btn btn-small" type="button" data-cv="lib-play">${live && live.music.playing && live.music.id === m.id ? 'Playing' : 'Play'}</button>` : '<button class="btn btn-small" type="button" data-cv="lib-add">Add</button>'}
+      ${m.kind === 'audio' ? `<a class="btn btn-small" href="#media">Play in Media Centre</a>` : '<button class="btn btn-small" type="button" data-cv="lib-add">Add</button>'}
       ${owner ? `<button class="btn btn-quiet btn-small" type="button" data-cv="lib-pin">${m.pinned ? 'Unpin' : 'Pin'}</button><button class="btn btn-quiet btn-small" type="button" data-cv="lib-del" aria-label="Delete file">×</button>` : ''}</span></div>`).join('');
     if ($('cvLib')._html !== html) { $('cvLib')._html = html; $('cvLib').innerHTML = html || '<p class="note">The library is empty.</p>'; }
     if (document.activeElement !== $('cvLimit')) $('cvLimit').value = String(playlistMB || '');
@@ -171,6 +190,8 @@
       case 'clear': { const done = Hub.remember('canvas', 'Drawing cleared.'); live.strokes = []; commit(); done(); break; }
       case 'spot-off': live.spot = Object.assign({}, live.spot, { on: false }); commit(); break;
       case 'add': add(b.dataset.type); break;
+      case 'men': if (item) { const done = Hub.remember('canvas', 'Players changed.'); item.men = v ? lineUp(v) : []; commit(); done(); } break;
+      case 'item-lock': if (item) { item.lock = !item.lock; commit(); } break;
       case 'item-up': if (item) { item.z = Math.max(...live.items.map((x) => x.z)) + 1; commit(); } break;
       case 'item-del': if (item) { const done = Hub.remember('canvas', `${NAMES[item.type]} removed.`); live.items = live.items.filter((x) => x !== item); commit(); done(); } break;
       case 'board-load': { const bd = live.boards.find((x) => x.id === row.dataset.id); if (bd) { live.items = bd.items.map((x) => Object.assign({}, x)); live.strokes = bd.strokes.map((x) => Object.assign({}, x)); commit(); Hub.toast(`Loaded ${bd.name}`); } break; }
